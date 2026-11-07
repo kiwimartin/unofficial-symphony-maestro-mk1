@@ -7,7 +7,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$PLUGIN_DIR/build"
 
-if [ "${1:-}" = "clean" ]; then
+UNSIGNED=false
+CLEAN=false
+for arg in "$@"; do
+    case "$arg" in
+        clean) CLEAN=true ;;
+        --unsigned) UNSIGNED=true ;;
+        *) echo "Unknown argument: $arg" >&2; exit 2 ;;
+    esac
+done
+if [ "$CLEAN" = true ]; then
     echo "[ASP] Cleaning build directory..."
     rm -rf "$BUILD_DIR"
 fi
@@ -35,6 +44,11 @@ if [ -d "$BUILD_DIR/ApogeeSymIO.driver" ]; then
     ls -la "$BUILD_DIR/ApogeeSymIO.driver/Contents/"
     echo "[ASP] Binary:"
     file "$BUILD_DIR/ApogeeSymIO.driver/Contents/MacOS/ApogeeSymIO" 2>/dev/null || true
+
+    if [ "$UNSIGNED" = true ]; then
+        echo "[ASP] Unsigned compile only; not loadable/installed and no signing inputs used."
+        exit 0
+    fi
 
     # Sign with Developer ID — required for coreaudiod to load the plugin.
     # HAL plugins loaded without a valid signature may be silently rejected on macOS 26.

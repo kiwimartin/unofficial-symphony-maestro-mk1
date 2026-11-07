@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "REPLACE_WITH_EXACT_TESTED_COMMIT",
+  "teamID": "YOURTEAMID",
+  "identifiers": {
+    "app": "com.YOURDOMAIN.symphonymaestro",
+    "diagnostic": "com.YOURDOMAIN.symphonymaestro.diagnostics",
+    "passiveDriver": "com.YOURDOMAIN.symphonymaestro.passive",
+    "driver": "com.YOURDOMAIN.symphonymaestro.thunderbridge"
+  },
+  "applicationCertificateSHA1": "REPLACE_WITH_OWN_APPLICATION_CERTIFICATE_SHA1",
+  "profiles": {
+    "app": "/absolute/external/own-app.provisionprofile",
+    "diagnostic": "/absolute/external/own-diagnostic.provisionprofile",
+    "passiveDriver": "/absolute/external/own-passive.provisionprofile",
+    "driver": "/absolute/external/own-audio-driver.provisionprofile"
+  },
+  "artifacts": {},
+  "hardwareEvidence": {"sourceCommit": "", "testedArtifactHashes": {}, "tests": {}},
+  "installer": {},
+  "approvalReference": ""
+}
