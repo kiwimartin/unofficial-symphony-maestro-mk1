@@ -134,6 +134,8 @@ public struct LegacyDeviceAssignment: Equatable, Sendable {
     public let deviceID: String
     public let profileID: String
     public let mode: LegacyConverterMode
+    /// Trust provenance must be retained for any future hardware-control gate.
+    public let identification: LegacyIdentificationSource
     public let channels: LegacyChannelCapabilities
     public let inputs: LegacyChannelRange?
     public let outputs: LegacyChannelRange?
@@ -217,7 +219,7 @@ public enum LegacyTopologyPlanner {
                 outputs += capabilities.outputs
                 mappedDevices.append(LegacyDeviceAssignment(
                     deviceID: device.id, profileID: device.profile.id, mode: device.mode,
-                    channels: capabilities, inputs: assignedInputs, outputs: assignedOutputs))
+                    identification: device.identification, channels: capabilities, inputs: assignedInputs, outputs: assignedOutputs))
 
                 if device.identification == .unverified {
                     warnings.append("\(device.id): identity not verified")
