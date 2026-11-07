@@ -6,7 +6,7 @@
 <key>CFBundlePackageType</key><string>DEXT</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>CFBundleShortVersionString</key><string>0.1.0</string>
-<key>OSMinimumDriverKitVersion</key><string>25.2</string>
+<key>OSMinimumDriverKitVersion</key><string>24.0</string>
 <key>IOKitPersonalities</key><dict><key>SymphonyPassiveDiagnostics</key><dict>
 <key>CFBundleIdentifier</key><string>REPLACE_WITH_OWN_PASSIVE_DRIVER_IDENTIFIER</string>
 <key>IOClass</key><string>IOUserService</string>

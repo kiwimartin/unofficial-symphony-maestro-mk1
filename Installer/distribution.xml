@@ -4,9 +4,9 @@
     <organization>com.generouscorp.maestro</organization>
     <options customize="allow" require-scripts="true" hostArchitectures="arm64"/>
 
-    <!-- The ThunderBridge driver extension targets DriverKit 25.2; it cannot load below macOS 26. -->
+    <!-- Shared deployment floor: macOS 15 Sequoia / DriverKit 24. Tahoe is tested independently. -->
     <allowed-os-versions>
-        <os-version min="26.0"/>
+        <os-version min="15.0"/>
     </allowed-os-versions>
 
     <!-- Installer screens -->

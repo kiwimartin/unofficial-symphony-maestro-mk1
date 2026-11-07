@@ -19,15 +19,57 @@ permissions:
 
 jobs:
   macos-swift:
-    runs-on: macos-26
+    name: ${{ matrix.label }} build and tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            label: Sequoia 15
+            os_major: "15"
+            artifact_label: sequoia-15
+            developer_dir: /Applications/Xcode_16.4.app/Contents/Developer
+          - runner: macos-26
+            label: Tahoe 26
+            os_major: "26"
+            artifact_label: tahoe-26
+            developer_dir: ""
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Tahoe and Swift versions
+      - name: Select the Sequoia SDK toolchain
+        if: matrix.developer_dir != ''
+        shell: bash
+        env:
+          REQUESTED_DEVELOPER_DIR: ${{ matrix.developer_dir }}
         run: |
-          sw_vers
-          swift --version
+          set -euo pipefail
+          if [ ! -d "$REQUESTED_DEVELOPER_DIR" ]; then
+            echo "Required Sequoia Xcode toolchain is unavailable: $REQUESTED_DEVELOPER_DIR" >&2
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$REQUESTED_DEVELOPER_DIR" >> "$GITHUB_ENV"
+      - name: Verify host OS and record selected toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_version="$(sw_vers -productVersion)"
+          if [ "${actual_version%%.*}" != "${{ matrix.os_major }}" ]; then
+            echo "Runner OS mismatch: expected macOS ${{ matrix.os_major }}, got $actual_version" >&2
+            exit 1
+          fi
+          {
+            sw_vers
+            uname -m
+            xcodebuild -version
+            swift --version
+            xcrun --sdk macosx --show-sdk-version
+            xcrun --sdk driverkit --show-sdk-version
+          } | tee legacy-build-environment.txt
+      - name: Verify common Sequoia/Tahoe deployment policy
+        run: python3 Tools/check-platform-compatibility.py --runner-label '${{ matrix.runner }}'
       - name: Release class and own-signing negative tests
         shell: bash
         run: |
@@ -97,10 +139,13 @@ jobs:
           cp docs/legacy-phase-*.md docs/legacy-implementation-status.md build-preview/
           cp docs/legacy-dual-port-diagnostics.md build-preview/
           git rev-parse HEAD > build-preview/SOURCE_COMMIT.txt
-          sw_vers > build-preview/BUILD_ENVIRONMENT.txt
-          swift --version >> build-preview/BUILD_ENVIRONMENT.txt
+          cp legacy-build-environment.txt build-preview/BUILD_ENVIRONMENT.txt
           cat > build-preview/README.txt <<'EOF'
           MAESTRO LEGACY X-SYMPHONY — UNSIGNED DEVELOPMENT BINARIES
+          CI runner: ${{ matrix.runner }} (${{ matrix.label }})
+          Observed OS, CPU architecture, Xcode, Swift and SDK versions are
+          recorded in BUILD_ENVIRONMENT.txt. This build targets the common
+          Sequoia/Tahoe baseline; its runner label is not hardware validation.
 
           This archive includes an isolated unsigned developer .app ZIP. It is
           NOT an installer and NOT a production
@@ -130,10 +175,19 @@ jobs:
           EOF
           (cd build-preview && shasum -a 256 * > ../legacy-checksums.txt)
           mv legacy-checksums.txt build-preview/SHA256SUMS.txt
+      - name: Verify assembled preview and executable deployment minimums
+        run: |
+          python3 Tools/check-platform-compatibility.py \
+            --runner-label '${{ matrix.runner }}' \
+            --smoke-preview --preview-bundle build/legacy-ci/LegacyMaestroPreview.app \
+            --binaries Apps/Maestro/.build/release/MaestroApp \
+              Apps/Maestro/.build/release/LegacyMaestroPreview \
+              Drivers/Thunderbolt/build/com.danielraffel.maestro.thunderbridge \
+              Drivers/Thunderbolt/build/passive/SymphonyPassiveDiagnostics-unsigned
       - name: Upload unsigned developer build (not an installer)
         uses: actions/upload-artifact@v4
         with:
-          name: maestro-legacy-dev-binaries-${{ github.run_number }}
+          name: maestro-legacy-dev-binaries-${{ matrix.artifact_label }}-${{ github.run_number }}
           path: build-preview/
           retention-days: 14
           if-no-files-found: error
@@ -141,8 +195,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: legacy-unit-test-results-${{ github.run_number }}
+          name: legacy-unit-test-results-${{ matrix.artifact_label }}-${{ github.run_number }}
           path: |
+            legacy-build-environment.txt
             legacy-test-output.log
             legacy-release-tests.log
             legacy-test-results.xml

@@ -6,7 +6,7 @@ This guide separates a build, a deployable macOS installer, and a GitHub Release
 
 ## 1. Build in GitHub Actions (available now)
 
-The feature branch has a macOS 26 CI workflow:
+The feature branch has a Sequoia 15 / Tahoe 26 CI matrix:
 \`.github/workflows/legacy-maestro-ci.yml\`. On pull requests it compiles
 the SwiftUI app and hardware diagnostics, runs Swift unit tests, then builds
 the two binaries in release configuration. Its downloadable Actions artifact
@@ -22,7 +22,7 @@ use its pull-request runs.
 
 ## 2. Local release-configuration compile (no installation)
 
-On an Apple Silicon Mac with full Xcode and Swift 6:
+On an Apple Silicon Mac with full Xcode and Swift 6 (Xcode 16.4 for the Sequoia SDK baseline, current Xcode for Tahoe):
 
 \`\`\`sh
 git clone https://github.com/kiwimartin/unofficial-symphony-maestro-mk1.git

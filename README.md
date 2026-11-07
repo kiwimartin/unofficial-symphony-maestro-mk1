@@ -1,6 +1,8 @@
 # Unofficial Symphony Maestro for Apogee Symphony I/O MK I
 
-Modern Apple Silicon support for the Apogee Symphony I/O MK I over **USB and ThunderBridge**, on **macOS 26 (Tahoe) or later**.
+Modern Apple Silicon support for the Apogee Symphony I/O MK I over **USB and ThunderBridge**, with a development baseline of **macOS 15 (Sequoia)** and separate **macOS 26 (Tahoe)** build/test coverage.
+
+**Fork development status:** Sequoia/Tahoe compatibility checks apply to the source and CI developer artifacts. The upstream installer linked below has not been rebuilt by this change and is not a Sequoia release. Signed driver activation and physical audio still require validation on each OS. See [compatibility evidence and limits](docs/legacy-sequoia-tahoe.md).
 
 <h1><a href="https://github.com/danielraffel/unofficial-symphony-maestro-mk1/releases/latest/download/UnofficialSymphonyMaestro.pkg">
 Download the latest Unofficial Symphony Maestro Installer (.pkg)</a></h1>
@@ -15,7 +17,7 @@ _This software has had limited real-world testing. Please closely read the setup
 
 This project restores support for the **Apogee Symphony I/O MK I** on Apple Silicon Macs. It was developed with **Apogee's knowledge and blessing**, but it is **not affiliated with, supported by, or endorsed by Apogee** in any way. Apogee does not provide support for this software.
 
-Due to the technical approach used, this software **requires an Apple Silicon Mac running macOS 26 or later**. It will **never support Intel Macs or versions of macOS earlier than macOS 26**.
+The fork development baseline is **Apple Silicon, macOS 15 Sequoia / DriverKit 24**. Tahoe builds retain their current hardware code and modern SDK/UI path and run an independent test job. Intel Macs and systems below macOS 15 are outside this compatibility target. Hardware acceptance is separate from successful compilation, tests and preview-window startup.
 
 ## Screenshots
 
@@ -71,10 +73,10 @@ With an 8MicPre installed, channels 1-8 gain a preamp: gain, 48 V phantom, polar
 ## Requirements
 
 - Apple Silicon Mac (M-series)
-- macOS 26 (Tahoe) or later
+- Development builds: macOS 15 (Sequoia) or macOS 26 (Tahoe); see compatibility limits above
 - Apogee Symphony I/O MK I, connected over USB or an Apogee ThunderBridge
 
-_Intel Macs and earlier versions of macOS are not supported. The original Symphony 64 PCIe card (in a Thunderbolt chassis) is theoretically supported but untested._
+_Intel Macs and versions of macOS below 15 are not supported. The original Symphony 64 PCIe card (in a Thunderbolt chassis) is theoretically supported but untested._
 
 ## Beta Status
 

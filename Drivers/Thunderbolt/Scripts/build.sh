@@ -14,6 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DRIVER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$DRIVER_DIR/build"
 SOURCE_DIR="$DRIVER_DIR/Source"
+. "$DRIVER_DIR/../../Tools/lib/platform-targets.sh"
 IIG_DIR="$BUILD_DIR/iig"
 
 CLEAN=false
@@ -54,10 +55,10 @@ echo "[TB] iig: $IIG"
 # Development builds (SIP disabled + AMFI bypass) use arm64e which works fine.
 # The DriverKit SDK supports both: targets = [ x86_64, arm64, arm64e ]-driverkit.
 if [ "$PRODUCTION" = true ] || [ "$UNSIGNED" = true ]; then
-    ARCH_TARGET="arm64-apple-driverkit25.2"
+    ARCH_TARGET="arm64-apple-driverkit${MAESTRO_DRIVERKIT_DEPLOYMENT_TARGET}"
     echo "[TB] Architecture: arm64 (production — avoids arm64e ABI kernel check)"
 else
-    ARCH_TARGET="arm64e-apple-driverkit25.2"
+    ARCH_TARGET="arm64e-apple-driverkit${MAESTRO_DRIVERKIT_DEPLOYMENT_TARGET}"
     echo "[TB] Architecture: arm64e (development)"
 fi
 
@@ -76,7 +77,7 @@ echo "[TB] Running iig on SymphonyThunderbridge.iig..."
 $IIG --def "$SOURCE_DIR/SymphonyThunderbridge.iig" \
      --header "$IIG_DIR/SymphonyThunderbridge.h" \
      --impl "$IIG_DIR/SymphonyThunderbridge.iig.cpp" \
-     --deployment-target 25.2 \
+     --deployment-target "$MAESTRO_DRIVERKIT_DEPLOYMENT_TARGET" \
      -- \
      -isysroot "$SDK" \
      -x c++ \
@@ -90,7 +91,7 @@ echo "[TB] Running iig on SymphonyAudioDevice.iig..."
 $IIG --def "$SOURCE_DIR/SymphonyAudioDevice.iig" \
      --header "$IIG_DIR/SymphonyAudioDevice.h" \
      --impl "$IIG_DIR/SymphonyAudioDevice.iig.cpp" \
-     --deployment-target 25.2 \
+     --deployment-target "$MAESTRO_DRIVERKIT_DEPLOYMENT_TARGET" \
      -- \
      -isysroot "$SDK" \
      -x c++ \
@@ -104,7 +105,7 @@ echo "[TB] Running iig on SymphonyUserClient.iig..."
 $IIG --def "$SOURCE_DIR/SymphonyUserClient.iig" \
      --header "$IIG_DIR/SymphonyUserClient.h" \
      --impl "$IIG_DIR/SymphonyUserClient.iig.cpp" \
-     --deployment-target 25.2 \
+     --deployment-target "$MAESTRO_DRIVERKIT_DEPLOYMENT_TARGET" \
      -- \
      -isysroot "$SDK" \
      -x c++ \
@@ -118,7 +119,7 @@ echo "[TB] Running iig on SymphonyClockSelectorControl.iig..."
 $IIG --def "$SOURCE_DIR/SymphonyClockSelectorControl.iig" \
      --header "$IIG_DIR/SymphonyClockSelectorControl.h" \
      --impl "$IIG_DIR/SymphonyClockSelectorControl.iig.cpp" \
-     --deployment-target 25.2 \
+     --deployment-target "$MAESTRO_DRIVERKIT_DEPLOYMENT_TARGET" \
      -- \
      -isysroot "$SDK" \
      -x c++ \
@@ -132,7 +133,7 @@ echo "[TB] Running iig on SymphonyPhantomControl.iig..."
 $IIG --def "$SOURCE_DIR/SymphonyPhantomControl.iig" \
      --header "$IIG_DIR/SymphonyPhantomControl.h" \
      --impl "$IIG_DIR/SymphonyPhantomControl.iig.cpp" \
-     --deployment-target 25.2 \
+     --deployment-target "$MAESTRO_DRIVERKIT_DEPLOYMENT_TARGET" \
      -- \
      -isysroot "$SDK" \
      -x c++ \
@@ -146,7 +147,7 @@ echo "[TB] Running iig on SymphonyMicGainControl.iig..."
 $IIG --def "$SOURCE_DIR/SymphonyMicGainControl.iig" \
      --header "$IIG_DIR/SymphonyMicGainControl.h" \
      --impl "$IIG_DIR/SymphonyMicGainControl.iig.cpp" \
-     --deployment-target 25.2 \
+     --deployment-target "$MAESTRO_DRIVERKIT_DEPLOYMENT_TARGET" \
      -- \
      -isysroot "$SDK" \
      -x c++ \
@@ -160,7 +161,7 @@ echo "[TB] Running iig on SymphonyOpticalControl.iig..."
 $IIG --def "$SOURCE_DIR/SymphonyOpticalControl.iig" \
      --header "$IIG_DIR/SymphonyOpticalControl.h" \
      --impl "$IIG_DIR/SymphonyOpticalControl.iig.cpp" \
-     --deployment-target 25.2 \
+     --deployment-target "$MAESTRO_DRIVERKIT_DEPLOYMENT_TARGET" \
      -- \
      -isysroot "$SDK" \
      -x c++ \
@@ -176,6 +177,8 @@ COMMON_FLAGS=(
     -target "$ARCH_TARGET"
     -isysroot "$SDK"
     -std=c++17
+    -Werror=unguarded-availability
+    -Werror=unguarded-availability-new
     -iframework "$FRAMEWORK_DIR"
     -I "$IIG_DIR"
     -I "$SOURCE_DIR"
@@ -298,6 +301,7 @@ mkdir -p "$DEXT_DIR"
 
 cp "$BUILD_DIR/com.danielraffel.maestro.thunderbridge" "$DEXT_DIR/"
 cp "$DRIVER_DIR/Info.plist" "$DEXT_DIR/"
+/usr/libexec/PlistBuddy -c "Set :DTPlatformVersion $(xcrun --sdk driverkit --show-sdk-version)" "$DEXT_DIR/Info.plist"
 
 # Embed provisioning profile (required for SIP-enabled operation)
 if [ "$PRODUCTION" = true ]; then
