@@ -112,7 +112,7 @@ Exit 0: all enumerated card services answered; **not hardware acceptance**.
 Exit 2: no driver service, open denied, old selector, sleeping/missing endpoint,
 or another per-card read failure; inspect JSON. Exit 1: collection/encoding
 failure. Every service gets a separate registry ID; multiple cards are not
-silently merged. `driverVersion` is null when not exposed by IORegistry;
+silently merged. `driverVersion` is unavailable when not exposed by IORegistry;
 record the installed/loaded build identity separately before hardware acceptance.
 PCI identity, raw card/port registers, RX clock detection/rate and available
 counters are exported. Lock, converter inventory, active physical channel map,
@@ -171,7 +171,8 @@ Local Linux: passive C++ tests and source safety gates pass; no Swift/Apple SDK
 is installed locally. Tahoe GitHub Actions compiles SwiftUI/diagnostic binaries,
 runs the existing and new Swift tests, tests passive C++ capture, and compiles/
 links arm64 DriverKit with `--unsigned`. The latter exits before bundle/profile
-lookup. Test XML, source SHA, build environment and binary checksums are retained.
+lookup. Full test output (plus XML when emitted by SwiftPM), source SHA, build
+environment and binary checksums are retained.
 Read actual PR checks for the resulting run; CI success is never hardware proof.
 
 Hardware tests **not run**: initial passive capture, each converter identity,
@@ -206,3 +207,12 @@ port reports with validity; unknown inventory remains unknown; synthetic
 ambiguity/reconnect tests resolve through existing fallback; C++/Swift/Tahoe
 build checks pass; all hardware and signing blockers remain visible. Hardware
 acceptance and enabling Port-2 DMA are explicitly outside these criteria.
+
+CI evidence: runs 9 and 10 passed all 1,236 tests in 89 suites, existing and new
+Swift executables, and the unsigned DriverKit build. Artifact inspection found
+the relative XML output path did not produce a retained report. The follow-up
+uses an absolute path and always captures test stdout/stderr with `tee` and
+`pipefail`, requiring a test artifact to exist. Consult the final PR run for
+verification of this correction. Compiler warnings remain in existing code
+(e.g. CFString pointer usage and Swift actor-isolation warnings); no test or
+build failure was reported in those runs. Hardware tests remain unperformed.

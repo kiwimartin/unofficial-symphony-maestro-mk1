@@ -38,7 +38,10 @@ jobs:
         run: swift build --product HardwareTest
       - name: Build and run Swift package tests (no connected hardware)
         working-directory: Apps/Maestro
-        run: swift test --xunit-output ../../legacy-test-results.xml
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift test --xunit-output "$GITHUB_WORKSPACE/legacy-test-results.xml" 2>&1 | tee "$GITHUB_WORKSPACE/legacy-test-output.log"
       - name: Compile release-optimized developer binaries (unsigned)
         working-directory: Apps/Maestro
         run: |
@@ -96,6 +99,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: legacy-unit-test-results-${{ github.run_number }}
-          path: legacy-test-results.xml
-          if-no-files-found: warn
+          path: |
+            legacy-test-output.log
+            legacy-test-results.xml
+          if-no-files-found: error
           retention-days: 14
