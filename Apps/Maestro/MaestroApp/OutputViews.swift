@@ -37,6 +37,12 @@ import MaestroDevice
 struct OutputControlsView: View {
     private let appState: AppState
     @State private var channels: [OutputChannelState]
+    @State private var stereoLinks = Set<Int>()
+    @State private var stereoPending = Set<Int>()
+    @State private var stereoResetInProgress = false
+    @State private var stereoRevisions: [Int: UUID] = [:]
+    @State private var stereoConfirmedLevels: [Int: (left: Double, right: Double)] = [:]
+    @State private var stereoWrites = StereoLevelWriteCoordinator()
     @State private var errorMessage: String?
     @State private var showResetAlert: Bool = false
     /// Non-nil while the "reset defaults" confirmation is up; carries the scope.
@@ -104,6 +110,166 @@ struct OutputControlsView: View {
         let offset = ControlTabScrollPreferences.remembers
             ? appState.controlTabScrollOffset(for: .output) : 0
         _scrollPosition = State(initialValue: ScrollPosition(x: offset))
+    }
+
+
+    private var visibleStereoCount: Int { min(channels.count, analogOutputStripCount) }
+    private var stereoBoundaries: [Int] { [layout.slot1.analogOutputChannels] }
+    private var stereoGroups: [StereoChannelGroup] {
+        StereoChannelLinking.groups(channelCount: visibleStereoCount,
+            linkedPairStarts: layout.isKnown ? stereoLinks : [], boundaries: stereoBoundaries)
+    }
+    private var stereoStorageKey: String {
+        let uid = appState.device?.identifier.deviceUID ?? "local"
+        return "stereo.outputPairs.v1." + Data(uid.utf8).base64EncodedString()
+    }
+    private var stereoConnectionID: ObjectIdentifier? {
+        appState.device.map { ObjectIdentifier($0) }
+    }
+    private func monoOutputStrip(_ i: Int) -> some View {
+        OutputChannelStripView(
+            channel: $channels[i],
+            label: i < outputChannelLabels.count ? outputChannelLabels[i] : "Out \(i + 1)",
+            appState: appState,
+            meterIndex: i,
+            showTrims: appState.showOutputTrims,
+            onAnalogRefChange: { level in
+                applyAnalogRefChange(i, level: level)
+            },
+            onDigitalRefChange: { level in
+                applyDigitalRefChange(i, level: level)
+            },
+            onTrimChange: { _ in
+                saveChannelStates()
+                Task { await writeOutputProperty(i, .analogIOType,
+                    value: .uint32(outputAnalogIOTypeWithTrim(i))) }
+            },
+            showZoneColoring: appState.showMeterZoneColoring
+        )
+        .disabled(!stereoPending.isEmpty || stereoResetInProgress)
+        .background(GeometryReader { geo in
+            Color.clear.preference(key: AnalogStripHeightKey.self, value: geo.size.height)
+        })
+    }
+
+    private func stereoUsesGain(_ index: Int) -> Bool { false }
+    private func stereoValue(_ index: Int) -> Double {
+        guard channels.indices.contains(index) else { return 0 }
+        return channels[index].trim }
+    private func stereoRange(_ index: Int) -> ClosedRange<Double> {
+        guard channels.indices.contains(index) else { return 0...0 }
+        return OutputChannelLogic.trimRange(digitalRefLevel: channels[index].digitalRefLevel).range
+    }
+    private func stereoLevelStep(_ index: Int) -> Double { OutputChannelLogic.trimStep }
+    private func stereoCompatible(_ left: Int, _ right: Int) -> Bool {
+        guard channels.indices.contains(left), channels.indices.contains(right) else { return false }
+        return channels[left].analogRefLevel == channels[right].analogRefLevel &&
+        channels[left].digitalRefLevel == channels[right].digitalRefLevel
+    }
+
+    private func stereoLevelRange(_ left: Int, _ right: Int) -> ClosedRange<Double> {
+        let l = stereoRange(left), r = stereoRange(right)
+        let offset = stereoValue(right) - stereoValue(left)
+        let lower = max(l.lowerBound, r.lowerBound - offset)
+        let upper = min(l.upperBound, r.upperBound - offset)
+        return lower <= upper ? lower...upper : l
+    }
+    private func stereoLevelBinding(_ left: Int, _ right: Int) -> Binding<Double>? {
+        guard stereoCompatible(left, right), appState.showOutputTrims else { return nil }
+        return Binding(get: { stereoValue(left) }, set: { requested in
+            guard stereoCompatible(left, right), let values = StereoChannelLinking.movePair(
+                left: stereoValue(left), right: stereoValue(right), leftRange: stereoRange(left),
+                rightRange: stereoRange(right), requestedLeft: requested) else { return }
+            applyStereoLevels(left, right, values.left, values.right)
+        })
+    }
+    private func setStereoLink(_ pair: Int, linked: Bool) {
+        guard !stereoResetInProgress, !stereoPending.contains(pair), layout.isKnown, StereoChannelLinking.canLink(pairStart: pair,
+            channelCount: visibleStereoCount, boundaries: stereoBoundaries) else { return }
+        if linked {
+            guard stereoCompatible(pair, pair + 1), let quieter = StereoChannelLinking.quieterLevel(
+                left: stereoValue(pair), right: stereoValue(pair + 1), leftRange: stereoRange(pair),
+                rightRange: stereoRange(pair + 1)) else {
+                errorMessage = "Stereo linking needs matching analog and digital reference levels and compatible trim ranges. Adjust L/R separately first."
+                return
+            }
+            applyStereoLevels(pair, pair + 1, quieter, quieter, linkOnSuccess: pair)
+        } else { stereoLinks.remove(pair) }
+        if !linked { appState.channelStateStore.save(stereoLinks.sorted(), for: stereoStorageKey) }
+    }
+    private func applyStereoLevels(_ left: Int, _ right: Int, _ leftValue: Double, _ rightValue: Double, linkOnSuccess: Int? = nil) {
+        guard !stereoResetInProgress else { return }
+        guard stereoCompatible(left, right), let device = appState.device else {
+            errorMessage = "No compatible device connected: stereo level alignment could not be confirmed."
+            return
+        }
+        let connectionID = ObjectIdentifier(device)
+        let layoutToken = appState.cardLayoutToken
+        let storageKey = stereoStorageKey
+        let store = appState.channelStateStore
+        let contextIsCurrent: @MainActor () -> Bool = {
+            stereoConnectionID == connectionID && appState.cardLayoutToken == layoutToken
+                && stereoStorageKey == storageKey
+        }
+        if stereoConfirmedLevels[left] == nil {
+            stereoConfirmedLevels[left] = (stereoValue(left), stereoValue(right))
+        }
+        var writes: [StereoLevelWrite] = []
+        for (index, value) in [(left, leftValue), (right, rightValue)] {
+            let changed = stereoValue(index) != value
+            channels[index].trim = value
+            // Initial alignment lowers only the louder side. Common fader
+            // requests always contain both writes so a coalesced request can
+            // repair an older operation interrupted between L and R.
+            if changed || linkOnSuccess == nil {
+                writes.append(StereoLevelWrite(index: index, selector: .analogIOType, value: outputAnalogIOTypeWithTrim(index)))
+            }
+        }
+        let revision = UUID()
+        stereoRevisions[left] = revision
+        stereoPending.insert(left)
+        stereoWrites.submit(key: storageKey + ".\(left)", writes: writes, write: { write in
+            guard contextIsCurrent() else { throw CancellationError() }
+            try await device.setProperty(PropertyAddress(selector: write.selector, scope: .output,
+                element: UInt32(write.index)), value: .uint32(write.value))
+            guard contextIsCurrent() else { throw CancellationError() }
+        }, completion: { result in
+            // Superseded requests cannot clear a newer request's pending state.
+            guard stereoRevisions[left] == revision, contextIsCurrent() else { return }
+            stereoRevisions.removeValue(forKey: left)
+            stereoPending.remove(left)
+            switch result {
+            case .success:
+                stereoConfirmedLevels.removeValue(forKey: left)
+                if let pair = linkOnSuccess { stereoLinks.insert(pair) }
+                store.save(confirmedChannelStates, for: ChannelStateStore.outputKey)
+                store.save(stereoLinks.sorted(), for: storageKey)
+            case .failure(let error):
+                // A failed second write can leave hardware values unequal.
+                // Restore the saved controls, remove the stereo claim and
+                // explicitly require checking the actual hardware values.
+                let confirmed = confirmedChannelStates
+                for index in [left, right] where channels.indices.contains(index) {
+                    channels[index] = confirmed[index]
+                }
+                stereoConfirmedLevels.removeValue(forKey: left)
+                stereoLinks.remove(left)
+                store.save(stereoLinks.sorted(), for: storageKey)
+                errorMessage = "Stereo level write failed; hardware L/R values are unconfirmed. Check both channels before linking again: \(error)"
+            }
+        })
+    }
+
+    /// Never persist another pair's optimistic in-flight fader values when an
+    /// unrelated mono setting or a different pair finishes first.
+    private var confirmedChannelStates: [OutputChannelState] {
+        var snapshot = channels
+        for (pair, levels) in stereoConfirmedLevels {
+            for (index, value) in [(pair, levels.left), (pair + 1, levels.right)] where snapshot.indices.contains(index) {
+                snapshot[index].trim = value
+            }
+        }
+        return snapshot
     }
 
     /// Speaker output **mode** — not a source selector. The IDs are
@@ -238,8 +404,10 @@ struct OutputControlsView: View {
                     // NOT gated on the faders being visible — legacy's Reset
                     // Trims works either way (`:120-129`).
                     Button("Reset Trims") {
-                        showResetAlert = true
+                        guard stereoPending.isEmpty else { return }
+                    showResetAlert = true
                     }
+                    .disabled(!stereoPending.isEmpty)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .help("Reset Trims — sets every analog output trim to 0.0 dB "
@@ -250,12 +418,15 @@ struct OutputControlsView: View {
                 // offered first preserves trims — they are calibration data.
                 Menu("Reset Defaults") {
                     Button("Reset Monitor Settings (keep trims)") {
+                        guard stereoPending.isEmpty else { return }
                         pendingResetScope = .allButCalibration
                     }
                     Button("Reset Monitor Settings and Trims", role: .destructive) {
+                        guard stereoPending.isEmpty else { return }
                         pendingResetScope = .all
                     }
                 }
+                .disabled(!stereoPending.isEmpty)
                 .menuStyle(.borderlessButton)
                 .fixedSize()
                 .help("Restore speaker/headphone levels, mute, dim, sum and speaker mode "
@@ -263,19 +434,25 @@ struct OutputControlsView: View {
 
                 Spacer()
             }
+            .disabled(stereoResetInProgress)
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
             .alert("Reset All Output Trims?", isPresented: $showResetAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Reset All Trims", role: .destructive) {
+                    guard stereoPending.isEmpty else { return }
                     // Only the strips that were not already at 0.0 need a write;
                     // the trim rides in byte[1] of the packed analog-IO-type
                     // command, so the reset re-sends that command.
                     let touched = OutputChannelLogic.resetTrims(&channels)
                     saveChannelStates()
-                    for i in touched {
-                        Task { await writeOutputProperty(i, .analogIOType,
-                            value: .uint32(outputAnalogIOTypeWithTrim(i))) }
+                    stereoResetInProgress = true
+                    Task { @MainActor in
+                        defer { stereoResetInProgress = false }
+                        for i in touched {
+                            await writeOutputProperty(i, .analogIOType,
+                                value: .uint32(outputAnalogIOTypeWithTrim(i)))
+                        }
                     }
                 }
             } message: {
@@ -286,6 +463,7 @@ struct OutputControlsView: View {
                                         set: { if !$0 { pendingResetScope = nil } })) {
                 Button("Cancel", role: .cancel) { pendingResetScope = nil }
                 Button("Reset", role: .destructive) {
+                    guard stereoPending.isEmpty else { return }
                     let scope = pendingResetScope ?? .allButCalibration
                     pendingResetScope = nil
                     Task { await resetMonitorDefaults(scope: scope) }
@@ -297,34 +475,42 @@ struct OutputControlsView: View {
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 0) {
                     // Analog output strips
-                    ForEach(Array(0..<min(channels.count, analogOutputStripCount)), id: \.self) { i in
-                        if i > 0 {
-                            Divider()
-                                .frame(height: nil)
-                                .opacity(0.4)
+                    ForEach(stereoGroups) { group in
+                        if group.left > 0 { Divider().opacity(0.4) }
+                        if let right = group.right {
+                            StereoChannelStripView(
+                                label: "Output \(group.left + 1)/\(right + 1)",
+                                leftIndex: group.left, rightIndex: right,
+                                appState: appState, isInput: false,
+                                onUnlink: { setStereoLink(group.left, linked: false) },
+                                level: stereoLevelBinding(group.left, right),
+                                levelRange: stereoLevelRange(group.left, right),
+                                levelStep: stereoLevelStep(group.left),
+                                levelLabel: stereoUsesGain(group.left) ? "Linked gain" : "Linked trim",
+                                leftValue: stereoValue(group.left), rightValue: stereoValue(right),
+                                showZoneColoring: appState.showMeterZoneColoring,
+                                isUpdating: !stereoPending.isEmpty || stereoResetInProgress
+                            ) {
+                                HStack(alignment: .top) { monoOutputStrip(group.left); monoOutputStrip(right) }
+                            }
+                            .background(GeometryReader { geo in
+                                Color.clear.preference(key: AnalogStripHeightKey.self, value: geo.size.height)
+                            })
+                        } else {
+                            VStack(spacing: 4) {
+                                if let pair = StereoChannelLinking.pairStart(for: group.left,
+                                        channelCount: visibleStereoCount, boundaries: stereoBoundaries), layout.isKnown {
+                                    Button { setStereoLink(pair, linked: true) } label: {
+                                        Image(systemName: "link").font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .disabled(stereoPending.contains(pair) || stereoResetInProgress)
+                                    .help("Link \(pair + 1)/\(pair + 2) as stereo; match the quieter gain/trim")
+                                    .accessibilityLabel("Link output \(pair + 1)/\(pair + 2) as stereo")
+                                } else { Color.clear.frame(height: 16) }
+                                monoOutputStrip(group.left)
+                            }
                         }
-                        OutputChannelStripView(
-                            channel: $channels[i],
-                            label: i < outputChannelLabels.count ? outputChannelLabels[i] : "Out \(i + 1)",
-                            appState: appState,
-                            meterIndex: i,
-                            showTrims: appState.showOutputTrims,
-                            onAnalogRefChange: { level in
-                                applyAnalogRefChange(i, level: level)
-                            },
-                            onDigitalRefChange: { level in
-                                applyDigitalRefChange(i, level: level)
-                            },
-                            onTrimChange: { _ in
-                                saveChannelStates()
-                                Task { await writeOutputProperty(i, .analogIOType,
-                                    value: .uint32(outputAnalogIOTypeWithTrim(i))) }
-                            },
-                            showZoneColoring: appState.showMeterZoneColoring
-                        )
-                        .background(GeometryReader { geo in
-                            Color.clear.preference(key: AnalogStripHeightKey.self, value: geo.size.height)
-                        })
                     }
 
                     // Speaker / HP section — inline after analog strips, no header
@@ -454,6 +640,9 @@ struct OutputControlsView: View {
         }
         // Board detection is async and lands AFTER the first `.task` — without
         // this the strip array keeps whatever count the pre-detection layout had.
+        .onChange(of: stereoConnectionID) { _, _ in
+            initializeOutputChannels()
+        }
         .onChange(of: appState.cardLayoutToken) { _, _ in
             scrollRestorationPending = true
             initializeOutputChannels()
@@ -880,6 +1069,11 @@ struct OutputControlsView: View {
     // MARK: - Data Loading
 
     private func initializeOutputChannels() {
+        stereoWrites.invalidateAll()
+        stereoPending.removeAll()
+        stereoRevisions.removeAll()
+        stereoConfirmedLevels.removeAll()
+        stereoLinks = Set(appState.channelStateStore.load(stereoStorageKey, as: [Int].self) ?? [])
         let n = max(analogOutputStripCount, 1)
         // Keyed by the installed card pair — see `ChannelStateStore`.
         if let saved: [OutputChannelState] = appState.channelStateStore.load(ChannelStateStore.outputKey),
@@ -897,7 +1091,7 @@ struct OutputControlsView: View {
     }
 
     private func saveChannelStates() {
-        appState.channelStateStore.save(channels, for: ChannelStateStore.outputKey)
+        appState.channelStateStore.save(confirmedChannelStates, for: ChannelStateStore.outputKey)
     }
 
     private func loadSPDIFMirrors() async {
@@ -1154,6 +1348,9 @@ struct OutputControlsView: View {
     /// controller (`SymphonyIO.cpp:1626-1634`); on this unit that would rewrite
     /// the ADAT output crosspoints. Reset Routing lives on the routing pages.
     private func resetMonitorDefaults(scope: SymphonyIOResetScope) async {
+        guard stereoPending.isEmpty, !stereoResetInProgress else { return }
+        stereoResetInProgress = true
+        defer { stereoResetInProgress = false }
         let attenuation = UInt32(SymphonyIOMonitorDefaults.levelAttenuationDB)
         let level = -Double(SymphonyIOMonitorDefaults.levelAttenuationDB)
 

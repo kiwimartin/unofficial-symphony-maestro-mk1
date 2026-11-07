@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import MaestroCore
 import LegacyDiagnosticTransport
+import CryptoKit
 
 /// Legacy-only workspace. All edits are local; hardware controls remain closed.
 public struct LegacyControlWorkspaceView: View {
@@ -22,6 +23,10 @@ public struct LegacyControlWorkspaceView: View {
     @State private var restoreConfirmation = false
     @State private var storeAvailable = false
     @State private var clockStoreAvailable = false
+    /// Local presentation only, scoped to the exact converter inventory.
+    @State private var stereoLinks = Set<String>()
+    @State private var stereoLinkScope: String?
+    @State private var stereoLinkStoreAvailable = false
 
     private var inventory: LegacyRoutingInventory? {
         try? LegacyRoutingInventory(configuration: configuration, profiles: profiles)
@@ -56,6 +61,7 @@ public struct LegacyControlWorkspaceView: View {
                 LegacyConverterConfigurationView(observations: observations) { updated in
                     if updated != configuration {
                         configuration = updated; slots = [:]; hosts = [:]
+                        loadStereoLinks()
                     }
                 }
             }
@@ -67,19 +73,8 @@ public struct LegacyControlWorkspaceView: View {
                     if let inventory, !inventory.endpoints.isEmpty {
                         ScrollView([.horizontal, .vertical]) {
                             VStack(alignment: .leading) {
-                                ForEach(inventory.endpoints) { endpoint in
-                                    HStack {
-                                        Text(endpoint.label).frame(width: 330, alignment: .leading)
-                                        Picker("XLink-Slot", selection: slotBinding(endpoint.id)) {
-                                            Text("Unbekannt").tag(-1)
-                                            ForEach(0..<32, id: \.self) { Text("Slot \($0 + 1)").tag($0) }
-                                        }.frame(width: 170)
-                                        Picker(endpoint.direction == .output ? "DAW-Quelle" : "DAW-Ziel",
-                                               selection: hostBinding(endpoint.id)) {
-                                            Text("Keine Route").tag(0)
-                                            ForEach(1...64, id: \.self) { Text("DAW \($0)").tag($0) }
-                                        }.frame(width: 180).disabled((slots[endpoint.id] ?? -1) < 0)
-                                    }.font(.caption)
+                                ForEach(routingRows(in: inventory)) { row in
+                                    routingRow(row, inventory: inventory)
                                 }
                             }
                         }.frame(maxHeight: 300)
@@ -116,12 +111,169 @@ public struct LegacyControlWorkspaceView: View {
             }
             if let error { Text(error).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
         }
-        .onAppear { loadPresets() }
+        .onAppear { loadPresets(); loadStereoLinks() }
         .confirmationDialog("Bestehenden lokalen Routingentwurf ersetzen?", isPresented: $restoreConfirmation) {
             Button("Lokalen Entwurf ersetzen") { restoreRouting() }
             Button("Abbrechen", role: .cancel) {}
         } message: { Text("Hardware-Routing wird nicht verändert. Die Wandlerkonfiguration muss zum Preset passen.") }
     }
+    private struct RoutingRow: Identifiable {
+        let left: LegacyPhysicalEndpoint
+        let right: LegacyPhysicalEndpoint?
+        var id: String { left.id }
+    }
+
+    /// Pair by physical channel numbering, never by XLink slot or host route.
+    /// A converter/port/direction/media boundary is never crossed.
+    private func stereoPartner(for left: LegacyPhysicalEndpoint,
+                               in inventory: LegacyRoutingInventory) -> LegacyPhysicalEndpoint? {
+        guard left.channel > 0, !left.channel.isMultiple(of: 2) else { return nil }
+        return inventory.endpoints.first {
+            $0.deviceID == left.deviceID && $0.port == left.port &&
+            $0.direction == left.direction && $0.media == left.media &&
+            $0.channel == left.channel + 1
+        }
+    }
+
+    private func routingRows(in inventory: LegacyRoutingInventory) -> [RoutingRow] {
+        var consumed = Set<String>()
+        return inventory.endpoints.compactMap { endpoint in
+            guard !consumed.contains(endpoint.id) else { return nil }
+            consumed.insert(endpoint.id)
+            if stereoLinks.contains(endpoint.id), let right = stereoPartner(for: endpoint, in: inventory),
+               !consumed.contains(right.id) {
+                consumed.insert(right.id)
+                return RoutingRow(left: endpoint, right: right)
+            }
+            return RoutingRow(left: endpoint, right: nil)
+        }
+    }
+
+    @ViewBuilder
+    private func routingRow(_ row: RoutingRow, inventory: LegacyRoutingInventory) -> some View {
+        if let right = row.right {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Port \(row.left.port) · \(row.left.profileID) · \(row.left.media.rawValue) \(row.left.direction.rawValue) \(row.left.channel)/\(right.channel) · Stereo")
+                        .font(.caption.bold())
+                    Spacer()
+                    Button("Trennen") { setStereoLink(row.left, enabled: false, inventory: inventory) }
+                        .disabled(!stereoLinkStoreAvailable)
+                }
+                Text("Routingentwurf ohne Hardwarepegel: Pegelangleichung ist hier nicht verfügbar.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Picker(row.left.direction == .output ? "DAW-Stereoquelle" : "DAW-Stereoziel",
+                       selection: stereoHostBinding(left: row.left, right: right)) {
+                    Text("Individuelle L/R-Routen").tag(-1)
+                    Text("Keine Route").tag(0)
+                    ForEach(Array(stride(from: 1, through: 63, by: 2)), id: \.self) { first in
+                        Text("DAW \(first)/\(first + 1)").tag(first)
+                    }
+                }
+                .frame(width: 300)
+                .disabled(!hasExplicitSlot(row.left.id) || !hasExplicitSlot(right.id))
+                .help("Ändert nur den lokalen Routingentwurf für L und R. Beide XLink-Slots müssen ausdrücklich zugeordnet sein.")
+                endpointControls(row.left, side: "L")
+                endpointControls(right, side: "R")
+            }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.08)))
+        } else {
+            HStack {
+                endpointControls(row.left)
+                if let right = stereoPartner(for: row.left, in: inventory) {
+                    Button("Stereo \(row.left.channel)/\(right.channel)") {
+                        setStereoLink(row.left, enabled: true, inventory: inventory)
+                    }
+                    .disabled(!stereoLinkStoreAvailable)
+                    .help("Verbindet nur die Darstellung. Einzelne Slots und Routen bleiben erhalten; Hardwarepegel sind in dieser Ansicht unbekannt.")
+                }
+            }
+        }
+    }
+
+    private func endpointControls(_ endpoint: LegacyPhysicalEndpoint, side: String? = nil) -> some View {
+        HStack {
+            Text(side.map { "\($0) · \(endpoint.label)" } ?? endpoint.label)
+                .frame(width: 330, alignment: .leading)
+            Picker("XLink-Slot", selection: slotBinding(endpoint.id)) {
+                Text("Unbekannt").tag(-1)
+                ForEach(0..<32, id: \.self) { Text("Slot \($0 + 1)").tag($0) }
+            }.frame(width: 170)
+            Picker(endpoint.direction == .output ? "DAW-Quelle" : "DAW-Ziel", selection: hostBinding(endpoint.id)) {
+                Text("Keine Route").tag(0)
+                ForEach(1...64, id: \.self) { Text("DAW \($0)").tag($0) }
+            }.frame(width: 180).disabled(!hasExplicitSlot(endpoint.id))
+        }.font(.caption)
+    }
+
+    private func hasExplicitSlot(_ id: String) -> Bool {
+        slots[id].map { (0..<32).contains($0) } ?? false
+    }
+
+    private func stereoHostBinding(left: LegacyPhysicalEndpoint, right: LegacyPhysicalEndpoint) -> Binding<Int> {
+        Binding(get: {
+            let first = hosts[left.id] ?? 0
+            let second = hosts[right.id] ?? 0
+            if first == 0 && second == 0 { return 0 }
+            return (1...63).contains(first) && !first.isMultiple(of: 2) && second == first + 1 ? first : -1
+        }, set: { first in
+            // Linking never calls this setter. Only an explicit DAW-pair choice
+            // can replace the two intended host routes; slots remain untouched.
+            guard hasExplicitSlot(left.id), hasExplicitSlot(right.id) else { return }
+            if first == 0 {
+                hosts[left.id] = nil; hosts[right.id] = nil
+            } else if (1...63).contains(first), !first.isMultiple(of: 2) {
+                hosts[left.id] = first; hosts[right.id] = first + 1
+            }
+        })
+    }
+
+    private func stereoScope(for inventory: LegacyRoutingInventory) -> String {
+        let digest = SHA256.hash(data: Data(inventory.signature.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        return "maestro.legacyStereoLinks.v1.\(digest)"
+    }
+
+    private func loadStereoLinks() {
+        guard let inventory else {
+            stereoLinks = []; stereoLinkScope = nil; stereoLinkStoreAvailable = false
+            return
+        }
+        let key = stereoScope(for: inventory)
+        guard key != stereoLinkScope || !stereoLinkStoreAvailable else { return }
+        stereoLinkScope = key
+        do {
+            let saved: [String]
+            if let data = UserDefaults.standard.data(forKey: key) {
+                guard data.count <= 1_048_576 else { throw LegacyRoutingError.invalidInventory }
+                saved = try JSONDecoder().decode([String].self, from: data)
+            } else { saved = [] }
+            let eligible = Set(inventory.endpoints.filter { stereoPartner(for: $0, in: inventory) != nil }.map(\.id))
+            stereoLinks = Set(saved).intersection(eligible)
+            stereoLinkStoreAvailable = true
+        } catch {
+            stereoLinks = []; stereoLinkStoreAvailable = false
+            self.error = "Stereo-Verknüpfungen nicht lesbar; nichts überschrieben: \(error)"
+        }
+    }
+
+    private func setStereoLink(_ left: LegacyPhysicalEndpoint, enabled: Bool, inventory: LegacyRoutingInventory) {
+        guard stereoLinkStoreAvailable, stereoScope(for: inventory) == stereoLinkScope,
+              stereoPartner(for: left, in: inventory) != nil else { return }
+        var updated = stereoLinks
+        if enabled { updated.insert(left.id) } else { updated.remove(left.id) }
+        let eligible = Set(inventory.endpoints.filter { stereoPartner(for: $0, in: inventory) != nil }.map(\.id))
+        updated.formIntersection(eligible)
+        do {
+            let data = try JSONEncoder().encode(updated.sorted())
+            UserDefaults.standard.set(data, forKey: stereoScope(for: inventory))
+            stereoLinks = updated
+        } catch {
+            self.error = "Stereo-Verknüpfung nicht gespeichert: \(error)"
+        }
+    }
+
     private func slotBinding(_ id: String) -> Binding<Int> {
         Binding(get: { slots[id] ?? -1 }, set: { value in slots[id] = value; if value < 0 { hosts[id] = nil } })
     }
