@@ -142,7 +142,10 @@ Use function/statement anchors below; line numbers move as diagnostics are added
 - `Start` step 27 / `ReprogramCardAfterReset`: mask only `kInt_A2HWrap`.
   `InterruptOccurred` baseline line 4067: `hasAudioWrap` tests only Port-1 wrap;
   there are no per-port overrun/underrun counters or second wrap ownership.
-  Port-2 IRQ masks/ack semantics are not sufficiently defined here to enable.
+  Port-2 wrap/overflow/underflow masks already exist in `Sym64Registers.h`
+  (`kInt_A2H2Wrap=0x02000000`, overflow `0x01000000`, underflow `0x00800000`,
+  H2A2 wrap `0x00400000`). Their presence is useful source evidence; actual
+  IRQ timing/coalescing/acknowledgement on two active ports remains untested.
 - `Start` ASBD baseline lines 3442–3445: 32 channels, 128 bytes per frame.
   IO operation handler baseline line 3840 onwards copies one 32-channel ring.
   Need tested 32/64-channel packing, wrap boundaries, partial-port failure,
