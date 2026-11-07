@@ -21,6 +21,12 @@ jobs:
         run: |
           sw_vers
           swift --version
+      - name: Compile Maestro SwiftUI executable
+        working-directory: Apps/Maestro
+        run: swift build --product MaestroApp
+      - name: Compile hardware diagnostic CLI
+        working-directory: Apps/Maestro
+        run: swift build --product HardwareTest
       - name: Build and run Swift package tests (no connected hardware)
         working-directory: Apps/Maestro
         run: swift test
