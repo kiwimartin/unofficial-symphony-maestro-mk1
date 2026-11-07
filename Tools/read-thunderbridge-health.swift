@@ -1,7 +1,8 @@
 // Read the ThunderBridge dext's timing/register health snapshot.
 //
-// This is intentionally a read-only diagnostic. It does not change the
-// sample rate, host buffer, routing, or hardware state.
+// WARNING: selector 3 performs vendor READ requests using XLink TX and may
+// trigger link recovery and hardware writes in the loaded driver. It is NOT
+// passive. For passive dual-port capture use LegacyXLinkDiagnostics (selector 6).
 
 import Foundation
 import IOKit

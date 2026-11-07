@@ -22,6 +22,14 @@ struct SymphonyUserClient_IVars {
 // ── Dispatch Table ──────────────────────────────────────────────────────────
 
 static const IOUserClientMethodDispatch sMethods[kSelectorCount] = {
+    [kSelectorReadDualPortDiagnostics] = {
+        .function = nullptr,
+        .checkCompletionExists = false,
+        .checkScalarInputCount = 0,
+        .checkStructureInputSize = 0,
+        .checkScalarOutputCount = 0,
+        .checkStructureOutputSize = sizeof(SymphonyDualPortDiagnosticsOutput),
+    },
     [kSelectorSendVendor] = {
         .function                 = nullptr,  // handled inline in ExternalMethod
         .checkCompletionExists    = false,
@@ -219,6 +227,18 @@ kern_return_t SymphonyUserClient::ExternalMethod(
         }
         UCLOG("ExternalMethod: board types = %u/%u (valid %u/%u)",
               output.board[0], output.board[1], output.valid[0], output.valid[1]);
+        return kIOReturnSuccess;
+    }
+
+    if (selector == kSelectorReadDualPortDiagnostics) {
+        if (!ivars->driver) return kIOReturnNotReady;
+        SymphonyDualPortDiagnosticsOutput output = {};
+        kern_return_t r = ivars->driver->ReadDualPortDiagnostics(
+            reinterpret_cast<uint32_t *>(&output));
+        output.status = uint32_t(r);
+        auto outputData = OSData::withBytes(&output, sizeof(output));
+        if (!outputData) return kIOReturnNoMemory;
+        arguments->structureOutput = outputData;
         return kIOReturnSuccess;
     }
 

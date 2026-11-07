@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "Apps/Maestro/**"
+      - "Drivers/Thunderbolt/**"
+      - "docs/legacy-dual-port-diagnostics.md"
       - ".github/workflows/legacy-maestro-ci.yml"
   workflow_dispatch:
 
@@ -21,6 +23,13 @@ jobs:
         run: |
           sw_vers
           swift --version
+      - name: Passive C++ diagnostic invariants
+        run: bash Drivers/Thunderbolt/Scripts/test-passive-diagnostics.sh
+      - name: Compile and link unsigned arm64 DriverKit executable (no profiles/install)
+        run: bash Drivers/Thunderbolt/Scripts/build.sh --unsigned
+      - name: Compile passive legacy diagnostic CLI
+        working-directory: Apps/Maestro
+        run: swift build --product LegacyXLinkDiagnostics
       - name: Compile Maestro SwiftUI executable
         working-directory: Apps/Maestro
         run: swift build --product MaestroApp
@@ -29,12 +38,16 @@ jobs:
         run: swift build --product HardwareTest
       - name: Build and run Swift package tests (no connected hardware)
         working-directory: Apps/Maestro
-        run: swift test
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift test --xunit-output "$GITHUB_WORKSPACE/legacy-test-results.xml" 2>&1 | tee "$GITHUB_WORKSPACE/legacy-test-output.log"
       - name: Compile release-optimized developer binaries (unsigned)
         working-directory: Apps/Maestro
         run: |
           swift build -c release --product MaestroApp
           swift build -c release --product HardwareTest
+          swift build -c release --product LegacyXLinkDiagnostics
       - name: Stage test-only build artifact
         shell: bash
         run: |
@@ -42,6 +55,12 @@ jobs:
           mkdir -p build-preview
           cp Apps/Maestro/.build/release/MaestroApp build-preview/MaestroApp
           cp Apps/Maestro/.build/release/HardwareTest build-preview/HardwareTest
+          cp Apps/Maestro/.build/release/LegacyXLinkDiagnostics build-preview/
+          cp Drivers/Thunderbolt/build/com.danielraffel.maestro.thunderbridge build-preview/ThunderBridge-unsigned
+          cp docs/legacy-dual-port-diagnostics.md build-preview/
+          git rev-parse HEAD > build-preview/SOURCE_COMMIT.txt
+          sw_vers > build-preview/BUILD_ENVIRONMENT.txt
+          swift --version >> build-preview/BUILD_ENVIRONMENT.txt
           cat > build-preview/README.txt <<'EOF'
           MAESTRO LEGACY X-SYMPHONY — UNSIGNED DEVELOPMENT BINARIES
 
@@ -49,7 +68,13 @@ jobs:
           release. These command-line binaries are supplied solely for build
           diagnostics and developer analysis.
 
-          Not included: app bundle, Sparkle framework, DriverKit extension,
+          Includes: passive LegacyXLinkDiagnostics CLI and unsigned DriverKit
+          executable (compile/link evidence only; no installable dext bundle).
+          HardwareTest is a separate test tool and can exercise hardware writes.
+          LegacyXLinkDiagnostics uses only passive selector 6; it requires a
+          suitably signed diagnostic client and driver for actual hardware access.
+
+          Not included: app bundle, Sparkle framework, installable DriverKit extension,
           AudioServerPlugin, provisioning profiles, code signatures, PKG,
           notarization, or evidence of functioning legacy 64-channel audio.
           Do NOT install this archive over an existing Maestro application.
@@ -61,7 +86,7 @@ jobs:
           See docs/FORK_RELEASE_PROCESS.md and
               docs/legacy-first-release-readiness.md.
           EOF
-          (cd build-preview && shasum -a 256 MaestroApp HardwareTest > SHA256SUMS.txt)
+          (cd build-preview && shasum -a 256 MaestroApp HardwareTest LegacyXLinkDiagnostics ThunderBridge-unsigned SOURCE_COMMIT.txt BUILD_ENVIRONMENT.txt legacy-dual-port-diagnostics.md > SHA256SUMS.txt)
       - name: Upload unsigned developer build (not an installer)
         uses: actions/upload-artifact@v4
         with:
@@ -69,3 +94,13 @@ jobs:
           path: build-preview/
           retention-days: 14
           if-no-files-found: error
+      - name: Upload unit test results even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-unit-test-results-${{ github.run_number }}
+          path: |
+            legacy-test-output.log
+            legacy-test-results.xml
+          if-no-files-found: error
+          retention-days: 14

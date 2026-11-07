@@ -3,6 +3,7 @@
 # Uses the DriverKit SDK directly via CLI (no Xcode project required).
 #
 # Usage:
+#   ./Drivers/Thunderbolt/Scripts/build.sh --unsigned         # compile/link only (CI)
 #   ./Drivers/Thunderbolt/Scripts/build.sh                    # development build
 #   ./Drivers/Thunderbolt/Scripts/build.sh --clean             # clean + development build
 #   ./Drivers/Thunderbolt/Scripts/build.sh --production         # production build (Developer ID)
@@ -17,12 +18,20 @@ IIG_DIR="$BUILD_DIR/iig"
 
 CLEAN=false
 PRODUCTION=false
+UNSIGNED=false
 for arg in "$@"; do
     case "$arg" in
         --clean) CLEAN=true ;;
         --production) PRODUCTION=true ;;
+        --unsigned) UNSIGNED=true ;;
+        *) echo "Unknown argument: $arg" >&2; exit 2 ;;
     esac
 done
+
+if [ "$UNSIGNED" = true ] && [ "$PRODUCTION" = true ]; then
+    echo "--unsigned and --production are mutually exclusive" >&2
+    exit 2
+fi
 
 echo "[TB] SymphonyThunderbridge DriverKit build"
 echo "[TB] Driver dir: $DRIVER_DIR"
@@ -44,7 +53,7 @@ echo "[TB] iig: $IIG"
 # rejection (exec_mach_imgact) for non-platform binaries with SIP enabled.
 # Development builds (SIP disabled + AMFI bypass) use arm64e which works fine.
 # The DriverKit SDK supports both: targets = [ x86_64, arm64, arm64e ]-driverkit.
-if [ "$PRODUCTION" = true ]; then
+if [ "$PRODUCTION" = true ] || [ "$UNSIGNED" = true ]; then
     ARCH_TARGET="arm64-apple-driverkit25.2"
     echo "[TB] Architecture: arm64 (production — avoids arm64e ABI kernel check)"
 else
@@ -271,6 +280,11 @@ $CLANG \
     "$BUILD_DIR/SymphonyOpticalControl.iig.o"
 
 echo "[TB] Linked: $(file "$BUILD_DIR/com.danielraffel.maestro.thunderbridge")"
+
+if [ "$UNSIGNED" = true ]; then
+    echo "[TB] Unsigned arm64 compile/link only; no profiles, bundle, signing or installation."
+    exit 0
+fi
 
 # ── Step 4: Package .dext bundle (FLAT layout — matches Apple dexts) ──────────
 # DriverKit dexts use a flat bundle: binary + Info.plist + _CodeSignature at root.

@@ -65,6 +65,9 @@ public:
     // Called by SymphonyUserClient::ExternalMethod (kSelectorReadBoardTypes).
     virtual kern_return_t ReadBoardTypes(uint8_t *outTypes, uint8_t *outValid) LOCALONLY;
 
+    // Passive dual-port snapshot, no vendor command or recovery side effects.
+    virtual kern_return_t ReadDualPortDiagnostics(uint32_t *outWords) LOCALONLY;
+
     // Read a timing/register snapshot for controlled latency experiments.
     virtual kern_return_t ReadTimingHealth(uint32_t *outWords) LOCALONLY;
     // dext 113: driver-owned link watch + the app's zero-bus-traffic presence read.
