@@ -211,6 +211,8 @@ struct LegacyConverterConfigurationView: View {
     @discardableResult
     private func commit(_ updated: LegacyManualConfiguration) -> Bool {
         do {
+            // Reject invalid 32-channel-per-port plans BEFORE persisting them.
+            _ = try LegacyTopologyPlanner.plan(topology(from: updated))
             try LegacyAssignmentStore().save(updated)
             configuration = updated
             errorMessage = nil
@@ -250,7 +252,9 @@ struct LegacyConverterConfigurationView: View {
         let slot = updated.assignments[i]
         // Identity is never invented. Only a trusted live read can attach it.
         updated.assignments[i].hardwareIdentity =
-            observationByPosition[key(slot.port, slot.position)]?.hardwareIdentity
+            observationByPosition[key(slot.port, slot.position)].flatMap { observation in
+                observation.identityVerified ? observation.hardwareIdentity : nil
+            }
         guard commit(updated) else { return }
         confirmedThisSession.insert(id)
         skippedThisSession.remove(id)
@@ -283,7 +287,8 @@ struct LegacyConverterConfigurationView: View {
                     $0.port == port && $0.position == position
                 }) {
                     let oldID = updated.assignments[i].hardwareIdentity
-                    let newID = resolution.observation.hardwareIdentity
+                    let newID = resolution.observation.identityVerified
+                        ? resolution.observation.hardwareIdentity : nil
                     if oldID != nil && newID != nil && oldID != newID {
                         updated.assignments[i].profileID = nil
                         updated.assignments[i].mode = nil
@@ -302,7 +307,8 @@ struct LegacyConverterConfigurationView: View {
                             ? resolution.proposedProfileID : nil,
                         mode: resolution.status == .automaticallyIdentified
                             ? resolution.proposedMode : nil,
-                        hardwareIdentity: resolution.observation.hardwareIdentity)
+                        hardwareIdentity: resolution.observation.identityVerified
+                            ? resolution.observation.hardwareIdentity : nil)
                     updated.assignments.append(newSlot)
                     if resolution.status == .automaticallyIdentified {
                         automaticThisSession.insert(newSlot.id)
@@ -333,10 +339,9 @@ struct LegacyConverterConfigurationView: View {
         }
     }
 
-    private func channelSummary() -> String? {
-        let unresolved = configuration.assignments.filter { !$0.isComplete }.count
+    private func topology(from config: LegacyManualConfiguration) -> LegacyTopology {
         let ports = (1...LegacyTopologyPlanner.portCount).map { port in
-            LegacyPort(number: port, chain: configuration.assignments
+            LegacyPort(number: port, chain: config.assignments
                 .filter { $0.port == port && $0.isComplete }
                 .sorted { $0.position < $1.position }
                 .compactMap { slot in
@@ -346,8 +351,13 @@ struct LegacyConverterConfigurationView: View {
                                              mode: mode, identification: .manual)
                 })
         }
+        return LegacyTopology(ports: ports)
+    }
+
+    private func channelSummary() -> String? {
+        let unresolved = configuration.assignments.filter { !$0.isComplete }.count
         do {
-            let plan = try LegacyTopologyPlanner.plan(.init(ports: ports))
+            let plan = try LegacyTopologyPlanner.plan(topology(from: configuration))
             return "Nur logische Vorschau: \(plan.usedInputs) Eingänge / \(plan.usedOutputs) Ausgänge" +
                 (unresolved == 0 ? "" : " (\(unresolved) unbekannt)") +
                 ". Noch keine 64-Kanal-Audiofreigabe."
