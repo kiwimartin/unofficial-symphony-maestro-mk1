@@ -245,8 +245,10 @@ public struct LegacyControlWorkspaceView: View {
         stereoLinkScope = key
         do {
             let saved: [String]
-            if let data = UserDefaults.standard.data(forKey: key) {
-                guard data.count <= 1_048_576 else { throw LegacyRoutingError.invalidInventory }
+            if let stored = UserDefaults.standard.object(forKey: key) {
+                guard let data = stored as? Data, data.count <= 1_048_576 else {
+                    throw LegacyRoutingError.invalidInventory
+                }
                 saved = try JSONDecoder().decode([String].self, from: data)
             } else { saved = [] }
             let eligible = Set(inventory.endpoints.filter { stereoPartner(for: $0, in: inventory) != nil }.map(\.id))
