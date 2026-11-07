@@ -115,6 +115,25 @@ struct StereoLevelWriteCoordinatorTests {
     }
 
     @Test @MainActor
+    func lastAwaitOfSingleChannelAlignmentCannotReportStaleSuccess() async {
+        let coordinator = StereoLevelWriteCoordinator()
+        let writer = ControlledWriter(blockFirst: true)
+        let completions = Completions()
+        coordinator.submit(key: "output:0", writes: [pair(1)[0]], write: { try await writer.write($0) },
+                           completion: { completions.record("alignment", $0) })
+        await writer.waitForWrites(1)
+        coordinator.submit(key: "output:0", writes: pair(9), write: { try await writer.write($0) },
+                           completion: { completions.record("latest", $0) })
+        await writer.releaseFirst()
+        await completions.waitFor("latest")
+        let snapshot = await writer.snapshot()
+        #expect(snapshot.events == [pair(1)[0], pair(9)[0], pair(9)[1]])
+        #expect(snapshot.values == [0: 9, 1: 9])
+        #expect(snapshot.maximumActive == 1)
+        #expect(completions.results == ["alignment": .cancelled, "latest": .success])
+    }
+
+    @Test @MainActor
     func transportFailureStopsItsPairAndDoesNotPoisonLaterMove() async {
         let coordinator = StereoLevelWriteCoordinator()
         let writer = ControlledWriter(failingValue: 7)
