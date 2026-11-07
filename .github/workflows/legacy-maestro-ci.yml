@@ -5,6 +5,11 @@ on:
     paths:
       - "Apps/Maestro/**"
       - "Drivers/Thunderbolt/**"
+      - "Drivers/AudioServerPlugin/**"
+      - "Drivers/VolumeProxy/**"
+      - "Drivers/Shared/**"
+      - "Tools/**"
+      - "docs/legacy-*.md"
       - "docs/legacy-dual-port-diagnostics.md"
       - ".github/workflows/legacy-maestro-ci.yml"
   workflow_dispatch:
@@ -23,6 +28,20 @@ jobs:
         run: |
           sw_vers
           swift --version
+      - name: Release class and own-signing negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s Tools/tests -v 2>&1 | tee legacy-release-tests.log
+          python3 Tools/legacy-release-check.py --mode developer > legacy-developer-preflight.json
+      - name: Shared USB plugin/proxy contract tests
+        run: bash Drivers/Shared/run-tests.sh
+      - name: Compile USB AudioServerPlugin without signing/installing
+        run: bash Drivers/AudioServerPlugin/Scripts/build.sh --unsigned
+      - name: Compile VolumeProxy without signing/installing
+        run: |
+          mkdir -p build/legacy-ci
+          clang -o build/legacy-ci/MaestroVolumeProxy Drivers/VolumeProxy/MaestroVolumeProxy.c -I Drivers/Shared -arch arm64 -mmacosx-version-min=15.0 -framework Foundation -framework CoreAudio -framework AudioToolbox -framework IOKit -Wall -Wextra -O2
       - name: Passive C++ diagnostic invariants
         run: bash Drivers/Thunderbolt/Scripts/test-passive-diagnostics.sh
       - name: Dual-port DMA policy and bounds (sanitizers)
@@ -38,6 +57,9 @@ jobs:
       - name: Compile passive legacy diagnostic CLI
         working-directory: Apps/Maestro
         run: swift build --product LegacyXLinkDiagnostics
+      - name: Compile standalone passive developer GUI
+        working-directory: Apps/Maestro
+        run: swift build --product LegacyMaestroPreview
       - name: Compile Maestro SwiftUI executable
         working-directory: Apps/Maestro
         run: swift build --product MaestroApp
@@ -53,6 +75,7 @@ jobs:
       - name: Compile release-optimized developer binaries (unsigned)
         working-directory: Apps/Maestro
         run: |
+          swift build -c release --product LegacyMaestroPreview
           swift build -c release --product MaestroApp
           swift build -c release --product HardwareTest
           swift build -c release --product LegacyXLinkDiagnostics
@@ -61,11 +84,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build-preview
+          python3 Tools/assemble-legacy-preview.py Apps/Maestro/.build/release/LegacyMaestroPreview build/legacy-ci/LegacyMaestroPreview.app
+          ditto -c -k --keepParent build/legacy-ci/LegacyMaestroPreview.app build-preview/LegacyMaestroPreview-app.zip
           cp Apps/Maestro/.build/release/MaestroApp build-preview/MaestroApp
           cp Apps/Maestro/.build/release/HardwareTest build-preview/HardwareTest
           cp Apps/Maestro/.build/release/LegacyXLinkDiagnostics build-preview/
           cp Drivers/Thunderbolt/build/com.danielraffel.maestro.thunderbridge build-preview/ThunderBridge-unsigned
           cp Drivers/Thunderbolt/build/passive/SymphonyPassiveDiagnostics-unsigned build-preview/
+          cp build/legacy-ci/MaestroVolumeProxy build-preview/
+          cp Drivers/AudioServerPlugin/build/ApogeeSymIO.driver/Contents/MacOS/ApogeeSymIO build-preview/ApogeeSymIO-unsigned
+          cp legacy-developer-preflight.json build-preview/
+          cp docs/legacy-phase-*.md docs/legacy-implementation-status.md build-preview/
           cp docs/legacy-dual-port-diagnostics.md build-preview/
           git rev-parse HEAD > build-preview/SOURCE_COMMIT.txt
           sw_vers > build-preview/BUILD_ENVIRONMENT.txt
@@ -73,18 +102,22 @@ jobs:
           cat > build-preview/README.txt <<'EOF'
           MAESTRO LEGACY X-SYMPHONY — UNSIGNED DEVELOPMENT BINARIES
 
-          This is NOT a macOS .app, NOT an installer, and NOT a production
+          This archive includes an isolated unsigned developer .app ZIP. It is
+          NOT an installer and NOT a production
           release. These command-line binaries are supplied solely for build
           diagnostics and developer analysis.
 
-          Includes: passive LegacyXLinkDiagnostics CLI and unsigned DriverKit
+          Includes: LegacyMaestroPreview-app.zip (no Sparkle or driver activation),
+          unsigned USB plugin/proxy compile products (not installed),
+          phase status documents, explicit developer-only preflight report,
+          passive LegacyXLinkDiagnostics CLI and unsigned DriverKit
           executable (compile/link evidence only; no installable dext bundle).
           HardwareTest is a separate test tool and can exercise hardware writes.
           LegacyXLinkDiagnostics uses only passive selector 6; it requires a
           suitably signed diagnostic client and driver for actual hardware access.
 
-          Not included: app bundle, Sparkle framework, installable DriverKit extension,
-          AudioServerPlugin, provisioning profiles, code signatures, PKG,
+          Not included: signed shipping app, Sparkle framework, installable DriverKit extension,
+          installable AudioServerPlugin bundle, provisioning profiles, code signatures, PKG,
           notarization, or evidence of functioning legacy 64-channel audio.
           Do NOT install this archive over an existing Maestro application.
 
@@ -95,7 +128,8 @@ jobs:
           See docs/FORK_RELEASE_PROCESS.md and
               docs/legacy-first-release-readiness.md.
           EOF
-          (cd build-preview && shasum -a 256 MaestroApp HardwareTest LegacyXLinkDiagnostics ThunderBridge-unsigned SymphonyPassiveDiagnostics-unsigned SOURCE_COMMIT.txt BUILD_ENVIRONMENT.txt legacy-dual-port-diagnostics.md > SHA256SUMS.txt)
+          (cd build-preview && shasum -a 256 * > ../legacy-checksums.txt)
+          mv legacy-checksums.txt build-preview/SHA256SUMS.txt
       - name: Upload unsigned developer build (not an installer)
         uses: actions/upload-artifact@v4
         with:
@@ -110,6 +144,7 @@ jobs:
           name: legacy-unit-test-results-${{ github.run_number }}
           path: |
             legacy-test-output.log
+            legacy-release-tests.log
             legacy-test-results.xml
           if-no-files-found: error
           retention-days: 14

@@ -10,6 +10,7 @@ let package = Package(
         .executable(name: "MaestroApp", targets: ["MaestroApp"]),
         .executable(name: "HardwareTest", targets: ["HardwareTest"]),
         .executable(name: "LegacyXLinkDiagnostics", targets: ["LegacyXLinkDiagnostics"]),
+        .executable(name: "LegacyMaestroPreview", targets: ["LegacyMaestroPreview"]),
         .library(name: "MaestroCore", targets: ["MaestroCore"]),
         .library(name: "MaestroDevice", targets: ["MaestroDevice"]),
     ],
@@ -18,7 +19,7 @@ let package = Package(
         // MARK: - App
         .executableTarget(
             name: "MaestroApp",
-            dependencies: ["MaestroCore", "MaestroDevice", "LegacyDiagnosticTransport", .product(name: "Sparkle", package: "Sparkle")],
+            dependencies: ["MaestroCore", "MaestroDevice", "LegacyDiagnosticTransport", "LegacyMaestroUI", .product(name: "Sparkle", package: "Sparkle")],
             path: "MaestroApp",
             resources: [
                 .copy("Resources/AppIcon.icns"),
@@ -81,6 +82,17 @@ let package = Package(
             dependencies: ["MaestroCore", "LegacyDiagnosticTransport"],
             path: "LegacyXLinkDiagnostics",
             linkerSettings: [.linkedFramework("IOKit", .when(platforms: [.macOS]))]
+        ),
+
+        .target(
+            name: "LegacyMaestroUI",
+            dependencies: ["MaestroCore", "LegacyDiagnosticTransport"],
+            path: "LegacyMaestroUI"
+        ),
+        .executableTarget(
+            name: "LegacyMaestroPreview",
+            dependencies: ["LegacyMaestroUI"],
+            path: "LegacyMaestroPreview"
         ),
 
         // MARK: - Tests
