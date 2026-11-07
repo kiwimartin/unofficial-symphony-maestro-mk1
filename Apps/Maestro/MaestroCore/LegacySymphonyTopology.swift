@@ -110,6 +110,8 @@ public enum LegacyClockPreference: String, Codable, Sendable {
 
 /// Requested clock mode is not a report of real hardware lock state.
 public struct LegacyTopology: Codable, Equatable, Sendable {
+    /// Supplied at runtime by discovery, operator configuration, or loaded presets.
+    /// No particular studio configuration is compiled into this type.
     public var ports: [LegacyPort]
     public var clockPreference: LegacyClockPreference
 
@@ -118,21 +120,7 @@ public struct LegacyTopology: Codable, Equatable, Sendable {
         self.clockPreference = clockPreference
     }
 
-    /// User-supplied inventory. Within-port physical chain order is still unverified.
-    public static func referenceStudio() -> LegacyTopology {
-        LegacyTopology(ports: [
-            LegacyPort(number: 1, chain: [
-                .init(id: "p1-ad16x", profile: .ad16x, identification: .manual),
-                .init(id: "p1-da16x-a", profile: .da16x, identification: .manual),
-                .init(id: "p1-da16x-b", profile: .da16x, identification: .manual)
-            ]),
-            LegacyPort(number: 2, chain: [
-                .init(id: "p2-da16x", profile: .da16x, identification: .manual),
-                .init(id: "p2-da16x-advanced", profile: .da16x,
-                      mode: .advanced, identification: .manual)
-            ])
-        ])
-    }
+
 }
 
 /// One-based channel labels for the host. NOT FPGA routing-register addresses.
@@ -179,7 +167,9 @@ public enum LegacyPlannerError: Error, Equatable, Sendable {
     case exceedsPortCapacity(port: Int, direction: String, count: Int)
 }
 
-/// Deterministic channel allocation. All effects are confined to memory.
+/// Generic, deterministic channel allocation from caller-supplied device inventory.
+/// No specific chain combination is treated as supported or unsupported by name.
+/// All effects are confined to memory.
 public enum LegacyTopologyPlanner {
     public static let channelsPerPort = 32
     public static let portCount = 2
@@ -241,15 +231,6 @@ public enum LegacyTopologyPlanner {
             guard outputs <= channelsPerPort else {
                 throw LegacyPlannerError.exceedsPortCapacity(
                     port: port.number, direction: "outputs", count: outputs)
-            }
-
-            let adCount = port.chain.filter { $0.profile.id == "apogee.ad16x" }.count
-            let da = port.chain.filter { $0.profile.id == "apogee.da16x" }
-            if adCount == 1 && da.count == 2 {
-                warnings.append("Port \(port.number): AD-16X plus two DA-16X not explicitly in Apogee's supported combinations")
-            }
-            if da.count == 2 && Set(da.map(\.mode)).count == 2 {
-                warnings.append("Port \(port.number): mixed Standard/Advanced DA-16X configuration requires verification")
             }
 
             plannedPorts.append(LegacyPortPlan(
