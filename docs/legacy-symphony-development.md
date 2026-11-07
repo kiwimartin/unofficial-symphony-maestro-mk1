@@ -5,9 +5,24 @@ Status: **Phase 1, pure logical model — no physical hardware verification**.
 This is a separate development branch for legacy Apogee converters. It must not
 change the shipping Symphony I/O MK I behavior or bypass macOS security.
 
-## Reference studio
+## Dynamic topology: design requirement
 
-ThunderBridge (original Symphony 64) with the following **reported** inventory:
+The software must NOT contain a hard-coded device count, fixed converter order,
+preselected studio topology, or special-case logic for particular model combinations.
+The caller supplies a runtime topology from verified discovery, manually selected
+identities, or a saved configuration. The planner uses reported channel capabilities,
+the selected mode, and the physical port's capacity only. A user configuration
+is not proof that the hardware supports the requested chain.
+
+**Phase 1 only provides a pure software planner.** Physical device discovery
+is not yet implemented. A manually selected identity must never be presented
+as hardware-detected, and identification provenance is preserved on channel
+assignments. Additional device profiles can be supplied at runtime without
+changing the planner.
+
+## Optional hardware validation scenario (never compiled into application logic)
+
+One reported ThunderBridge setup to use later during hardware acceptance tests:
 
 | Port | Reported converters | Logical I/O at base sample rate |
 | --- | --- | --- |
@@ -28,8 +43,9 @@ fallback or unsupported "Loop Sync" for these legacy devices.
 Apogee's published supported combinations include two AD-16X or two DA-16X
 units and several specific mixed chains. They do **not explicitly list**
 (1 AD-16X + 2 DA-16X) on a single port, nor a two-DA chain with one in
-Standard and one in Advanced mode. These are user-reported configurations,
-not proven compatible by software-side capacity arithmetic.
+Standard and one in Advanced mode. These are documented as one validation scenario only,
+not proven compatible by software-side capacity arithmetic. **Do not encode
+warnings or behavior for these particular combinations in the planner.**
 
 Advanced mode is selected on the physical device at power-on; the application
 cannot safely assume that setting. An Advanced-mode DA-16X can also be
@@ -56,13 +72,13 @@ The upstream default branch currently handles one ThunderBridge XLink port:
 
 ## Phase 1: implemented
 
-- Read-only, pure Swift LegacySymphonyTopology.swift in MaestroCore.
+- Read-only, pure Swift LegacySymphonyTopology.swift in MaestroCore; no embedded studio fixture, no named-combination special cases.
 - Device profiles for AD-16X, DA-16X, and initial analog-only Rosetta
   200/800 profiles; further profiles can be added.
 - Independent 32-channel per-port planning, combined maximum host bus 64x64.
 - Optional internal/external word-clock preference.
-- Identity provenance plus checks for invalid port, duplicated IDs, missing
-  mode capability, and exceeding a port's 32-channel capacity.
+- Identity provenance preserved through assignments, plus checks for invalid
+  port, duplicated IDs, missing mode capability, and exceeding 32 channels per port.
 - Automated model tests in MaestroCoreTests.
 
 **Explicitly NOT implemented:** physical discovery, verified real routing
@@ -84,11 +100,12 @@ Test on a development Mac:
 3. Distinguish explicitly between live detected, manually identified, and
    unknown devices. Unknown Advanced equipment must NOT become an AD-16X by
    default.
-4. Return structured diagnostics for both ports and match them against the
-   reference model; do not enable port 2 audio DMA yet.
+4. Return structured diagnostics for both ports and, when available, compare
+   them against a separately provided user configuration; do not enable port 2
+   audio DMA yet.
 5. Add simulator tests for absent second port, no lock, unknown converter,
    device power cycle, and incorrect manually supplied type.
-6. On macOS Tahoe, have the studio run the **read-only** diagnostic. No Sonoma
+6. On macOS Tahoe, run a **read-only** diagnostic on available hardware. No Sonoma
    installation is assumed to be available.
 
 ## Phase 2B: driver and actual audio channels (requires hardware tests)
