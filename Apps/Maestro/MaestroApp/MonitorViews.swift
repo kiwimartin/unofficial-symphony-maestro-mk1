@@ -224,6 +224,16 @@ struct StatusBarView: View {
     }
 }
 
+// UndoManager keeps its actual AppState target weak. The handler retains only
+// this main-actor context, which also holds AppState weakly, so scheduling the
+// undo work never transfers the non-Sendable generic callback target.
+@MainActor
+private final class MonitorUndoContext {
+    weak var state: AppState?
+
+    init(state: AppState) { self.state = state }
+}
+
 // MARK: - Monitor Toolbar
 
 /// Simplified monitor controls in the macOS toolbar — mute icon + knob for Speaker, HP1, HP2.
@@ -240,6 +250,7 @@ struct MonitorToolbarView: View {
     var body: some View {
         @Bindable var state = appState
         let um = undoManager
+        let undoContext = MonitorUndoContext(state: appState)
         let prevSpeakerLevel = undoSpeakerLevel
         let prevHP1Level = undoHP1Level
         let prevHP2Level = undoHP2Level
@@ -257,16 +268,15 @@ struct MonitorToolbarView: View {
                     appState.speakerMuted.toggle()
                     let muted = appState.speakerMuted
                     let prev = !muted
-                    // UI UndoManager callbacks execute on the main thread.
-                    // Keep state access there; only the Sendable device enters the async write.
-                    um?.registerUndo(withTarget: appState) { s in
-                        MainActor.assumeIsolated {
-                            s.speakerMuted = prev
-                            let device = s.device
-                            Task { @MainActor in
-                                try? await device?.setProperty(
-                                    PropertyAddress(selector: .outputMute), value: .bool(prev))
-                            }
+                    // Resolve the weak state on the main actor, then update
+                    // the UI and issue its matching device write in one task.
+                    um?.registerUndo(withTarget: appState) { [undoContext] _ in
+                        Task { @MainActor in
+                            guard let state = undoContext.state else { return }
+                            state.speakerMuted = prev
+                            let device = state.device
+                            try? await device?.setProperty(
+                                PropertyAddress(selector: .outputMute), value: .bool(prev))
                         }
                     }
                     um?.setActionName("Speaker Mute")
@@ -289,15 +299,14 @@ struct MonitorToolbarView: View {
                     externalReadout: true,
                     onUserChange: { level in
                         guard !isLoading else { return }
-                        um?.registerUndo(withTarget: appState) { s in
-                            MainActor.assumeIsolated {
-                                s.speakerLevel = prevSpeakerLevel
-                                let device = s.device
-                                Task { @MainActor in
-                                    try? await device?.setProperty(
-                                        PropertyAddress(selector: .outputLevel),
-                                        value: .uint32(UInt32(max(0, -prevSpeakerLevel))))
-                                }
+                        um?.registerUndo(withTarget: appState) { [undoContext] _ in
+                            Task { @MainActor in
+                                guard let state = undoContext.state else { return }
+                                state.speakerLevel = prevSpeakerLevel
+                                let device = state.device
+                                try? await device?.setProperty(
+                                    PropertyAddress(selector: .outputLevel),
+                                    value: .uint32(UInt32(max(0, -prevSpeakerLevel))))
                             }
                         }
                         um?.setActionName("Speaker Level")
@@ -322,14 +331,13 @@ struct MonitorToolbarView: View {
                     appState.hp1Muted.toggle()
                     let muted = appState.hp1Muted
                     let prev = !muted
-                    um?.registerUndo(withTarget: appState) { s in
-                        MainActor.assumeIsolated {
-                            s.hp1Muted = prev
-                            let device = s.device
-                            Task { @MainActor in
-                                try? await device?.setProperty(
-                                    PropertyAddress(selector: .headphone1Mute), value: .bool(prev))
-                            }
+                    um?.registerUndo(withTarget: appState) { [undoContext] _ in
+                        Task { @MainActor in
+                            guard let state = undoContext.state else { return }
+                            state.hp1Muted = prev
+                            let device = state.device
+                            try? await device?.setProperty(
+                                PropertyAddress(selector: .headphone1Mute), value: .bool(prev))
                         }
                     }
                     um?.setActionName("Headphone 1 Mute")
@@ -349,15 +357,14 @@ struct MonitorToolbarView: View {
                     externalReadout: true,
                     onUserChange: { level in
                         guard !isLoading else { return }
-                        um?.registerUndo(withTarget: appState) { s in
-                            MainActor.assumeIsolated {
-                                s.hp1Level = prevHP1Level
-                                let device = s.device
-                                Task { @MainActor in
-                                    try? await device?.setProperty(
-                                        PropertyAddress(selector: .headphone1Level),
-                                        value: .uint32(UInt32(max(0, -prevHP1Level))))
-                                }
+                        um?.registerUndo(withTarget: appState) { [undoContext] _ in
+                            Task { @MainActor in
+                                guard let state = undoContext.state else { return }
+                                state.hp1Level = prevHP1Level
+                                let device = state.device
+                                try? await device?.setProperty(
+                                    PropertyAddress(selector: .headphone1Level),
+                                    value: .uint32(UInt32(max(0, -prevHP1Level))))
                             }
                         }
                         um?.setActionName("Headphone 1 Level")
@@ -379,14 +386,13 @@ struct MonitorToolbarView: View {
                     appState.hp2Muted.toggle()
                     let muted = appState.hp2Muted
                     let prev = !muted
-                    um?.registerUndo(withTarget: appState) { s in
-                        MainActor.assumeIsolated {
-                            s.hp2Muted = prev
-                            let device = s.device
-                            Task { @MainActor in
-                                try? await device?.setProperty(
-                                    PropertyAddress(selector: .headphone2Mute), value: .bool(prev))
-                            }
+                    um?.registerUndo(withTarget: appState) { [undoContext] _ in
+                        Task { @MainActor in
+                            guard let state = undoContext.state else { return }
+                            state.hp2Muted = prev
+                            let device = state.device
+                            try? await device?.setProperty(
+                                PropertyAddress(selector: .headphone2Mute), value: .bool(prev))
                         }
                     }
                     um?.setActionName("Headphone 2 Mute")
@@ -406,15 +412,14 @@ struct MonitorToolbarView: View {
                     externalReadout: true,
                     onUserChange: { level in
                         guard !isLoading else { return }
-                        um?.registerUndo(withTarget: appState) { s in
-                            MainActor.assumeIsolated {
-                                s.hp2Level = prevHP2Level
-                                let device = s.device
-                                Task { @MainActor in
-                                    try? await device?.setProperty(
-                                        PropertyAddress(selector: .headphone2Level),
-                                        value: .uint32(UInt32(max(0, -prevHP2Level))))
-                                }
+                        um?.registerUndo(withTarget: appState) { [undoContext] _ in
+                            Task { @MainActor in
+                                guard let state = undoContext.state else { return }
+                                state.hp2Level = prevHP2Level
+                                let device = state.device
+                                try? await device?.setProperty(
+                                    PropertyAddress(selector: .headphone2Level),
+                                    value: .uint32(UInt32(max(0, -prevHP2Level))))
                             }
                         }
                         um?.setActionName("Headphone 2 Level")

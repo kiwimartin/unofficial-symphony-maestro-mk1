@@ -37,7 +37,8 @@ declare it. Sequoia keeps the existing scroll-bounce fallback; Tahoe keeps the
 same styling. The older compiler also exposed existing main-actor violations
 in scroll notifications and monitor undo callbacks. Notifications now assert
 their documented main-thread delivery synchronously; undo updates UI state on
-the main actor and sends only the Sendable device connection into async writes.
+the main actor through a weak, actor-isolated context. The asynchronous tasks
+never transfer the non-Sendable UndoManager callback target between executors.
 Scroll debounce/restoration and monitor values remain the same. No audio
 timing/register/lifecycle logic changes for compatibility.
 
