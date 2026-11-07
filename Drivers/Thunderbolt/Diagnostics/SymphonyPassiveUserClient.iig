@@ -1,0 +1,13 @@
+#ifndef SymphonyPassiveUserClient_h
+#define SymphonyPassiveUserClient_h
+#include <DriverKit/IOUserClient.iig>
+class SymphonyPassiveDiagnostics;
+class SymphonyPassiveUserClient : public IOUserClient {
+public:
+    virtual bool init() override;
+    virtual void free() override;
+    virtual void SetDriver(SymphonyPassiveDiagnostics *driver) LOCALONLY;
+    virtual kern_return_t ExternalMethod(uint64_t selector, IOUserClientMethodArguments *arguments,
+        const IOUserClientMethodDispatch *dispatch, OSObject *target, void *reference) override LOCALONLY;
+};
+#endif

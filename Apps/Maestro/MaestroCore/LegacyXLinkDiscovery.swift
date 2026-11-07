@@ -18,7 +18,7 @@ public struct LegacyXLinkSnapshot: Codable, Equatable, Sendable {
         guard words[0] == 0 else { throw LegacyXLinkDiagnosticError.driverStatus(words[0]) }
         guard words[1] == 1 else { throw LegacyXLinkDiagnosticError.unsupportedSchema(words[1]) }
         guard words[2] == UInt32(Self.wordCount), words[3] & 0xFFFF0000 == 0,
-              words[25] == 0 else { throw LegacyXLinkDiagnosticError.invalidPacket }
+              words[25] & ~UInt32(1) == 0 else { throw LegacyXLinkDiagnosticError.invalidPacket }
         guard words[4] == 0x220019C2 else { throw LegacyXLinkDiagnosticError.incompatibleCard }
         self.words = words
     }
@@ -36,6 +36,7 @@ public struct LegacyXLinkSnapshot: Codable, Equatable, Sendable {
         return words[5 + index]
     }
 
+    public var countersAvailable: Bool { words[25] & 1 == 0 }
     public var irqCount: UInt64 { UInt64(words[21]) | UInt64(words[22]) << 32 }
     public var port1WrapCount: UInt64 { UInt64(words[23]) | UInt64(words[24]) << 32 }
 }

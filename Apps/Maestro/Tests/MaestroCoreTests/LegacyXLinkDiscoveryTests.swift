@@ -33,6 +33,9 @@ struct LegacyXLinkDiscoveryTests {
         let report = try refresh(words)
         #expect(report.ports.map(\.detectedSampleRate) == [44100, 48000])
         #expect(report.ports.allSatisfy { $0.clockLock == nil && $0.dmaErrorCount == nil })
+        #expect(report.snapshot.countersAvailable)
+        var passive = words; passive[25] = 1
+        #expect(try !LegacyXLinkSnapshot(words: passive).countersAvailable)
         #expect(report.snapshot.irqCount == (UInt64(2) << 32) + 7)
         #expect(report.snapshot.port1WrapCount == (UInt64(1) << 32) + 8)
     }
@@ -117,7 +120,7 @@ struct LegacyXLinkDiscoveryTests {
     }
     @Test func rejectsTruncatedFailedIncompatibleAndFuturePackets() throws {
         #expect(throws: LegacyXLinkDiagnosticError.self) { try LegacyXLinkSnapshot(words: []) }
-        let invalidFields: [(Int, UInt32)] = [(0, 1), (1, 2), (2, 25), (3, 0x10000), (4, 0x210019C2), (25, 1)]
+        let invalidFields: [(Int, UInt32)] = [(0, 1), (1, 2), (2, 25), (3, 0x10000), (4, 0x210019C2), (25, 2)]
         for (index, value) in invalidFields {
             var words = packet(); words[index] = value
             #expect(throws: LegacyXLinkDiagnosticError.self) { try LegacyXLinkSnapshot(words: words) }
