@@ -27,7 +27,7 @@
 	<key>DTPlatformName</key>
 	<string>driverkit</string>
 	<key>DTPlatformVersion</key>
-	<string>25.2</string>
+	<string>24.0</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>SymphonyThunderbridge</key>
@@ -78,6 +78,6 @@
 	<key>OSBundleUsageDescription</key>
 	<string>Symphony Thunderbridge driver communicates with the Apogee ThunderBridge PCIe audio interface for audio I/O and hardware control.</string>
 	<key>OSMinimumDriverKitVersion</key>
-	<string>25.2</string>
+	<string>24.0</string>
 </dict>
 </plist>

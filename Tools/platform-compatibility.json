@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "minimumMacOS": "15.0",
+  "minimumDriverKit": "24.0",
+  "architecture": "arm64",
+  "testedRunnerMajors": {"macos-15": 15, "macos-26": 26}
+}

@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 import plistlib
+import json
 import shutil
 
 def assemble(binary, output):
@@ -13,18 +14,19 @@ def assemble(binary, output):
     executable.parent.mkdir(parents=True)
     shutil.copy2(binary, executable)
     executable.chmod(executable.stat().st_mode | 0o111)
+    root = Path(__file__).resolve().parents[1]
+    policy = json.loads((root / 'Tools/platform-compatibility.json').read_text())
     info = {'CFBundleIdentifier': 'com.kiwimartin.symphonymaestro.preview',
             'CFBundleExecutable': 'LegacyMaestroPreview', 'CFBundleName': 'Legacy Symphony Preview',
             'CFBundleDisplayName': 'Legacy Symphony Developer Preview', 'CFBundlePackageType': 'APPL',
             'CFBundleVersion': '1', 'CFBundleShortVersionString': '0.1.0',
-            'LSMinimumSystemVersion': '26.0', 'NSHighResolutionCapable': True, 'NSPrincipalClass': 'NSApplication'}
+            'LSMinimumSystemVersion': policy['minimumMacOS'], 'NSHighResolutionCapable': True, 'NSPrincipalClass': 'NSApplication'}
     (output / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
     resources = output / 'Contents/Resources'; resources.mkdir()
     (resources / 'DEVELOPER-ONLY.txt').write_text(
         'Unsigned developer configuration/diagnostic GUI. Not a release or installer.\n'
         'No Sparkle feed, system extension, activation, vendor write or audio engine.\n'
         'Hardware controls are unavailable until approved signing and hardware validation.\n')
-    root = Path(__file__).resolve().parents[1]
     shutil.copy2(root / 'license.md', resources / 'LICENSE.md')
     shutil.copy2(root / 'Apps/Maestro/MaestroApp/Resources/Acknowledgements.html', resources / 'Acknowledgements.html')
     return output

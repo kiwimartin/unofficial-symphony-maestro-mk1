@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Maestro",
     platforms: [
-        .macOS(.v15)  // macOS 26 (Tahoe) — will bump to v16 when SDK ships
+        .macOS(.v15)  // Sequoia 15 baseline; Tahoe 26 is tested independently.
     ],
     products: [
         .executable(name: "MaestroApp", targets: ["MaestroApp"]),
