@@ -12,6 +12,8 @@ mkdir -p "$BUILD"
 for unit in SymphonyPassiveDiagnostics SymphonyPassiveUserClient; do
     "$IIG" --def "$SOURCE/$unit.iig" --header "$BUILD/$unit.h" --impl "$BUILD/$unit.iig.cpp" \
         --deployment-target 25.2 -- -isysroot "$SDK" -x c++ -std=c++17 -D__IIG=1 -iframework "$FRAMEWORKS"
+done
+for unit in SymphonyPassiveDiagnostics SymphonyPassiveUserClient; do
     for source in "$SOURCE/$unit.cpp" "$BUILD/$unit.iig.cpp"; do
         "$CLANG" -c -target arm64-apple-driverkit25.2 -isysroot "$SDK" -std=c++17 \
             -iframework "$FRAMEWORKS" -I "$BUILD" -I "$DRIVER_DIR/Source" -O2 \
