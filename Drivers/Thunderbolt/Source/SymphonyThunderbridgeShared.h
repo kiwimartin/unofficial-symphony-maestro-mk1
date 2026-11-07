@@ -11,7 +11,8 @@
 #define kSelectorReadTimingHealth 3         // ExternalMethod selector: timing/register snapshot
 #define kSelectorReadVendor     4            // ExternalMethod selector: read XLink vendor command
 #define kSelectorReadLinkState  5            // ExternalMethod selector: link watch state (no bus access)
-#define kSelectorCount          6
+#define kSelectorReadDualPortDiagnostics 6 // passive loads only; no XLink requests/recovery
+#define kSelectorCount          7
 #define kSymphonyUserClientType 0x53594D43u  // 'SYMC' — our custom IOUserClient type
 #define kSymphonyMeterWordCount 256          // words in the card meter DMA buffer
 
@@ -114,5 +115,23 @@ typedef struct {
     uint8_t  reserved[2];
     uint8_t  payload[64];
 } SymphonyVendorReadOutput; // 72 bytes
+
+// Versioned selector 6 ABI, all words little-endian on Apple Silicon.
+// registers[] follows SymphonyPassiveDiagnostics.h; validRegisters bit i marks
+// a successful register i load. No lock, converter identity or DMA error counts
+// are inferred from these words. IRQ/wrap counters are global/port-1 only.
+typedef struct {
+    uint32_t status;
+    uint32_t schemaVersion;
+    uint32_t wordCount;
+    uint32_t validRegisters;
+    uint32_t pciIdentity;
+    uint32_t registers[16];
+    uint32_t irqCountLo;
+    uint32_t irqCountHi;
+    uint32_t port1WrapCountLo;
+    uint32_t port1WrapCountHi;
+    uint32_t reserved;
+} SymphonyDualPortDiagnosticsOutput; // 104 bytes, schema 1
 
 #pragma pack(pop)

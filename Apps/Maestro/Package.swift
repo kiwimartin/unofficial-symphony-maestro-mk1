@@ -9,6 +9,7 @@ let package = Package(
     products: [
         .executable(name: "MaestroApp", targets: ["MaestroApp"]),
         .executable(name: "HardwareTest", targets: ["HardwareTest"]),
+        .executable(name: "LegacyXLinkDiagnostics", targets: ["LegacyXLinkDiagnostics"]),
         .library(name: "MaestroCore", targets: ["MaestroCore"]),
         .library(name: "MaestroDevice", targets: ["MaestroDevice"]),
     ],
@@ -64,6 +65,15 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("CoreAudio", .when(platforms: [.macOS])),
             ]
+        ),
+
+        // Dedicated passive diagnostic: does not instantiate AppState, the MK I
+        // connection, or HardwareTest (which can exercise hardware writes).
+        .executableTarget(
+            name: "LegacyXLinkDiagnostics",
+            dependencies: ["MaestroCore"],
+            path: "LegacyXLinkDiagnostics",
+            linkerSettings: [.linkedFramework("IOKit", .when(platforms: [.macOS]))]
         ),
 
         // MARK: - Tests

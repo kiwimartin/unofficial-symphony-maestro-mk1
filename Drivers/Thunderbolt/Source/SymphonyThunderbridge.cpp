@@ -35,6 +35,7 @@
 // FPGA register map
 #include "Sym64Registers.h"
 #include "SymphonyTimingProfile.h"
+#include "SymphonyPassiveDiagnostics.h"
 #include "SymphonyMixerPan.h"
 #include "SymphonyCardMixerRouting.h"
 
@@ -5437,6 +5438,50 @@ kern_return_t SymphonyThunderbridge::ReadBoardTypes(uint8_t *outTypes, uint8_t *
         outValid[b] = ivars->optionBoardTypeValid[b] ? 1 : 0;
     }
     return kIOReturnSuccess;
+}
+
+// Explicitly requested passive capture. The same queue is drained by power-off
+// and Stop before PCI closure. Do NOT call HardwareReachable/XLinkTxAdmissible:
+// those helpers may clear IRQs or initiate recovery. Suspended hardware stays
+// unavailable until the existing lifecycle code resumes it independently.
+kern_return_t SymphonyThunderbridge::ReadDualPortDiagnostics(uint32_t *outWords)
+{
+    if (!ivars || !outWords) return kIOReturnBadArgument;
+    IODispatchQueue *q = ivars->xlinkQueue;
+    if (!q) return kIOReturnNotReady;
+    __block SymphonyDualPortDiagnosticsOutput snapshot = {};
+    __block kern_return_t result = kIOReturnNotReady;
+    q->DispatchSync(^{
+        if (__atomic_load_n(&ivars->stopping, __ATOMIC_ACQUIRE) ||
+            __atomic_load_n(&ivars->txShutdown, __ATOMIC_ACQUIRE) ||
+            __atomic_load_n(&ivars->providerPowerOff, __ATOMIC_ACQUIRE) ||
+            __atomic_load_n(&ivars->hwSuspended, __ATOMIC_ACQUIRE) ||
+            !ivars->pciDevice) return;
+        // Config-space only presence test; never re-enable a missing endpoint.
+        if (!PCIEndpointPresent(ivars->pciDevice)) return;
+        ivars->pciDevice->ConfigurationRead32(0, &snapshot.pciIdentity);
+        // This phase is scoped to ThunderBridge, not legacy PCIe 2100 cards.
+        if (snapshot.pciIdentity != ((uint32_t(kThunderBridgeDeviceID) << 16) |
+                                     kApogeeVendorID)) {
+            result = kIOReturnUnsupported;
+            return;
+        }
+        CapturePassiveRegisters(ivars->barSize, [&](uint64_t offset, uint32_t *value) {
+            ReadRegister(ivars->pciDevice, ivars->barMemoryIndex, offset, value);
+        }, snapshot);
+        const uint64_t irq = __atomic_load_n(&ivars->interruptCount, __ATOMIC_ACQUIRE);
+        const uint64_t wraps = __atomic_load_n(&ivars->audioWrapCount, __ATOMIC_ACQUIRE);
+        snapshot.irqCountLo = uint32_t(irq);
+        snapshot.irqCountHi = uint32_t(irq >> 32);
+        snapshot.port1WrapCountLo = uint32_t(wraps);
+        snapshot.port1WrapCountHi = uint32_t(wraps >> 32);
+        snapshot.schemaVersion = 1;
+        snapshot.wordCount = sizeof(snapshot) / sizeof(uint32_t);
+        result = kIOReturnSuccess;
+    });
+    snapshot.status = uint32_t(result);
+    memcpy(outWords, &snapshot, sizeof(snapshot));
+    return result;
 }
 
 // ── ReadTimingHealth ────────────────────────────────────────────────────────
