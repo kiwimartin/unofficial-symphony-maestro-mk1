@@ -1,0 +1,24 @@
+name: Legacy Maestro macOS Build and Tests
+
+on:
+  pull_request:
+    paths:
+      - "Apps/Maestro/**"
+      - ".github/workflows/legacy-maestro-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-swift:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Build and run Swift package tests (no connected hardware)
+        working-directory: Apps/Maestro
+        run: swift test
