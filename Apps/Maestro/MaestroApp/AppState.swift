@@ -92,6 +92,11 @@ enum ConnectionMode: Equatable {
 final class AppState {
     /// Currently connected device (real or simulated).
     var device: (any DeviceConnection)?
+    /// Per-converter read-only X-Symphony observations for the manual-fallback UI.
+    /// Empty by default: the current ThunderBridge dext does not identify each
+    /// AD-16X / DA-16X / Rosetta individually. Never fabricate a detection.
+    /// A later verified legacy discovery service will populate this array.
+    var legacyConverterObservations: [LegacyConverterObservation] = []
     /// Currently selected navigation area.
     var selectedArea: NavigationArea = .launchDefault
     /// Whether to show the About panel.
