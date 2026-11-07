@@ -30,3 +30,42 @@ jobs:
       - name: Build and run Swift package tests (no connected hardware)
         working-directory: Apps/Maestro
         run: swift test
+      - name: Compile release-optimized developer binaries (unsigned)
+        working-directory: Apps/Maestro
+        run: |
+          swift build -c release --product MaestroApp
+          swift build -c release --product HardwareTest
+      - name: Stage test-only build artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build-preview
+          cp Apps/Maestro/.build/release/MaestroApp build-preview/MaestroApp
+          cp Apps/Maestro/.build/release/HardwareTest build-preview/HardwareTest
+          cat > build-preview/README.txt <<'EOF'
+          MAESTRO LEGACY X-SYMPHONY — UNSIGNED DEVELOPMENT BINARIES
+
+          This is NOT a macOS .app, NOT an installer, and NOT a production
+          release. These command-line binaries are supplied solely for build
+          diagnostics and developer analysis.
+
+          Not included: app bundle, Sparkle framework, DriverKit extension,
+          AudioServerPlugin, provisioning profiles, code signatures, PKG,
+          notarization, or evidence of functioning legacy 64-channel audio.
+          Do NOT install this archive over an existing Maestro application.
+
+          A release installer requires own Apple Developer signing identities,
+          matching Apple-approved DriverKit entitlements and profiles,
+          notarization, physical ThunderBridge testing and release sign-off.
+
+          See docs/FORK_RELEASE_PROCESS.md and
+              docs/legacy-first-release-readiness.md.
+          EOF
+          (cd build-preview && shasum -a 256 MaestroApp HardwareTest > SHA256SUMS.txt)
+      - name: Upload unsigned developer build (not an installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-legacy-dev-binaries-${{ github.run_number }}
+          path: build-preview/
+          retention-days: 14
+          if-no-files-found: error
