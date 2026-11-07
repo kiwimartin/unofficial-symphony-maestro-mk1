@@ -7,6 +7,7 @@ import MaestroCore
 /// This UI only saves local metadata. It NEVER changes converter hardware.
 struct LegacyConverterConfigurationView: View {
     let observations: [LegacyConverterObservation]
+    var onConfigurationChange: (LegacyManualConfiguration) -> Void = { _ in }
 
     @State private var configuration = LegacyManualConfiguration()
     @State private var confirmedThisSession = Set<UUID>()
@@ -199,6 +200,7 @@ struct LegacyConverterConfigurationView: View {
     private func load() {
         do {
             configuration = try LegacyAssignmentStore().load()
+            onConfigurationChange(configuration)
             didLoad = true
             loadingFailed = false
         } catch {
@@ -215,6 +217,7 @@ struct LegacyConverterConfigurationView: View {
             _ = try LegacyTopologyPlanner.plan(topology(from: updated))
             try LegacyAssignmentStore().save(updated)
             configuration = updated
+            onConfigurationChange(updated)
             errorMessage = nil
             return true
         } catch {

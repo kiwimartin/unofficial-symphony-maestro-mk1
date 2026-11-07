@@ -18,7 +18,7 @@ let package = Package(
         // MARK: - App
         .executableTarget(
             name: "MaestroApp",
-            dependencies: ["MaestroCore", "MaestroDevice", .product(name: "Sparkle", package: "Sparkle")],
+            dependencies: ["MaestroCore", "MaestroDevice", "LegacyDiagnosticTransport", .product(name: "Sparkle", package: "Sparkle")],
             path: "MaestroApp",
             resources: [
                 .copy("Resources/AppIcon.icns"),
@@ -67,11 +67,18 @@ let package = Package(
             ]
         ),
 
+        .target(
+            name: "LegacyDiagnosticTransport",
+            dependencies: ["MaestroCore"],
+            path: "LegacyDiagnosticTransport",
+            linkerSettings: [.linkedFramework("IOKit", .when(platforms: [.macOS]))]
+        ),
+
         // Dedicated passive diagnostic: does not instantiate AppState, the MK I
         // connection, or HardwareTest (which can exercise hardware writes).
         .executableTarget(
             name: "LegacyXLinkDiagnostics",
-            dependencies: ["MaestroCore"],
+            dependencies: ["MaestroCore", "LegacyDiagnosticTransport"],
             path: "LegacyXLinkDiagnostics",
             linkerSettings: [.linkedFramework("IOKit", .when(platforms: [.macOS]))]
         ),

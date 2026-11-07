@@ -107,10 +107,12 @@ public struct LegacyRoutingPreset: Codable, Equatable, Sendable {
     public let inventorySignature: String
     public let mapSignature: String
     public let sampleRate: UInt32
+    public let slotEntries: [LegacySlotEntry]
     public var routes: [LegacyRoute]
     public init(name: String, inventory: LegacyRoutingInventory, map: LegacySlotMap, routes: [LegacyRoute]) {
         self.name = name; self.inventorySignature = inventory.signature
-        self.mapSignature = map.signature; self.sampleRate = map.sampleRate; self.routes = routes
+        self.mapSignature = map.signature; self.sampleRate = map.sampleRate
+        self.slotEntries = map.entries; self.routes = routes
     }
     /// Returns local intended routes only. No hardware executor exists until the
     /// legacy routing protocol is verified. Saved data never grants write access.
