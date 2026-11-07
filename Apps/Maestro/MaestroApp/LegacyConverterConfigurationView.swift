@@ -33,13 +33,13 @@ struct LegacyConverterConfigurationView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Manuelle Zuordnung für Legacy-Wandler (AD/DA/Rosetta). Diese Einstellungen ändern noch kein Hardware-Routing.",
+            Label("Assign legacy converters (AD/DA/Rosetta). This configuration does not change hardware routing.",
                   systemImage: "info.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             if observations.isEmpty {
-                Text("Die aktuelle ThunderBridge-Treiberversion erkennt einzelne Legacy-Wandler noch nicht automatisch. Geräte können hier pro Port manuell eingetragen werden; die Angaben gelten bis zu einer Hardwareprüfung als unbestätigt.")
+                Text("This ThunderBridge driver does not yet enumerate individual legacy converters. You can enter them manually for each port. Entries are unverified until hardware discovery becomes available.")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
@@ -50,13 +50,13 @@ struct LegacyConverterConfigurationView: View {
                     let portDevices = configuration.assignments
                         .filter { $0.port == port }.sorted { $0.position < $1.position }
                     if portDevices.isEmpty {
-                        Text("Keine Gerätezuordnung vorhanden")
+                        Text("No converter assignments")
                             .foregroundStyle(.tertiary)
                     }
                     ForEach(portDevices) { slot in
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Gerät \(slot.position): \(profileName(for: slot))")
+                                Text("Converter \(slot.position): \(profileName(for: slot))")
                                     .font(.body)
                                 Text(statusLabel(for: slot))
                                     .font(.caption)
@@ -64,7 +64,7 @@ struct LegacyConverterConfigurationView: View {
                                         ? Color.green : Color.secondary)
                             }
                             Spacer()
-                            Button("Zuordnen…") { edit(slot.id) }
+                            Button("Assign…") { edit(slot.id) }
                                 .controlSize(.small)
                             Button {
                                 remove(slot)
@@ -72,13 +72,13 @@ struct LegacyConverterConfigurationView: View {
                                 Image(systemName: "minus.circle")
                             }
                             .buttonStyle(.borderless)
-                            .help("Nur lokale Zuordnung entfernen")
+                            .help("Remove this local assignment only")
                         }
                     }
                     Button {
                         appendUnknown(to: port)
                     } label: {
-                        Label("Wandler hinzufügen…", systemImage: "plus.circle")
+                        Label("Add converter…", systemImage: "plus.circle")
                     }
                     .disabled(loadingFailed)
                     .controlSize(.small)
@@ -90,12 +90,12 @@ struct LegacyConverterConfigurationView: View {
             }
             if !pending.isEmpty {
                 HStack {
-                    Label("\(pending.count) Zuordnung(en) für diese Sitzung unbestätigt",
+                    Label("\(pending.count) assignment(s) need confirmation this session",
                           systemImage: "exclamationmark.triangle")
                         .font(.caption)
                         .foregroundStyle(.orange)
                     Spacer()
-                    Button("Nächsten prüfen") {
+                    Button("Review next") {
                         if let next = pending.first { edit(next.id) }
                     }
                     .controlSize(.small)
@@ -121,15 +121,15 @@ struct LegacyConverterConfigurationView: View {
             }
         }) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Wandler zuordnen").font(.title3.bold())
+                Text("Assign converter").font(.title3.bold())
                 if let slot = currentEditedSlot() {
-                    Text("Port \(slot.port) · Gerät \(slot.position)")
+                    Text("Port \(slot.port) · Converter \(slot.position)")
                         .foregroundStyle(.secondary)
                 }
-                Text("Wenn der Wandler nicht eindeutig erkannt werden kann, Gerätetyp und Betriebsart manuell auswählen. Der Advanced-Modus wird am Gerät eingestellt, nicht hier umgeschaltet.")
+                Text("If identification is ambiguous, select the converter model and operating mode. Advanced mode is configured on the physical converter; this panel cannot switch it.")
                     .font(.caption)
-                Picker("Gerätetyp", selection: $editorProfileID) {
-                    Text("Unbekannt").tag("")
+                Picker("Converter model", selection: $editorProfileID) {
+                    Text("Unknown").tag("")
                     ForEach(profiles, id: \.id) { profile in
                         Text(profile.name).tag(profile.id)
                     }
@@ -140,7 +140,7 @@ struct LegacyConverterConfigurationView: View {
                         editorMode = .standard
                     }
                 }
-                Picker("Betriebsmodus", selection: $editorMode) {
+                Picker("Operating mode", selection: $editorMode) {
                     Text("Standard").tag(LegacyConverterMode.standard)
                     if profiles.first(where: { $0.id == editorProfileID })?.advanced != nil {
                         Text("Advanced").tag(LegacyConverterMode.advanced)
@@ -148,12 +148,12 @@ struct LegacyConverterConfigurationView: View {
                 }
                 .disabled(editorProfileID.isEmpty)
                 HStack {
-                    Button("Später") {
+                    Button("Later") {
                         if let editorID { skippedThisSession.insert(editorID) }
                         showingEditor = false
                     }
                     Spacer()
-                    Button("Zuordnung bestätigen") { saveEditedSelection() }
+                    Button("Save local assignment") { saveEditedSelection() }
                         .buttonStyle(.borderedProminent)
                         .disabled(editorProfileID.isEmpty || loadingFailed)
                 }
@@ -179,16 +179,16 @@ struct LegacyConverterConfigurationView: View {
 
     private func profileName(for slot: LegacyConverterAssignment) -> String {
         guard let id = slot.profileID, let profile = profiles.first(where: { $0.id == id }) else {
-            return "Unbekannt"
+            return "Unknown"
         }
         return profile.name + (slot.mode == .advanced ? " (Advanced)" : "")
     }
 
     private func statusLabel(for slot: LegacyConverterAssignment) -> String {
-        if automaticThisSession.contains(slot.id) { return "Automatisch identifiziert (diese Sitzung)" }
-        if confirmedThisSession.contains(slot.id) { return "Manuell bestätigt (nicht hardwaregeprüft)" }
-        if !slot.isComplete { return "Zuordnung erforderlich" }
-        return "Gespeicherte Auswahl – erneut bestätigen"
+        if automaticThisSession.contains(slot.id) { return "Automatically identified (current session)" }
+        if confirmedThisSession.contains(slot.id) { return "Manually confirmed (not hardware-verified)" }
+        if !slot.isComplete { return "Assignment required" }
+        return "Saved choice – confirm again"
     }
 
     private func currentEditedSlot() -> LegacyConverterAssignment? {
@@ -204,7 +204,7 @@ struct LegacyConverterConfigurationView: View {
         } catch {
             loadingFailed = true
             didLoad = true
-            errorMessage = "Gespeicherte Legacy-Zuordnungen können nicht gelesen werden (\(error)). Nichts wurde überschrieben."
+            errorMessage = "Saved legacy assignments could not be read (\(error)). No data was overwritten."
         }
     }
 
@@ -218,7 +218,7 @@ struct LegacyConverterConfigurationView: View {
             errorMessage = nil
             return true
         } catch {
-            errorMessage = "Zuordnung konnte nicht gespeichert werden: \(error)"
+            errorMessage = "Could not save assignment: \(error)"
             return false
         }
     }
@@ -318,7 +318,7 @@ struct LegacyConverterConfigurationView: View {
             guard updated == configuration || commit(updated) else { return }
             promptNextObservedAmbiguity()
         } catch {
-            errorMessage = "Fehler bei der Geräteerkennung: \(error)"
+            errorMessage = "Converter discovery error: \(error)"
         }
     }
 
@@ -358,11 +358,11 @@ struct LegacyConverterConfigurationView: View {
         let unresolved = configuration.assignments.filter { !$0.isComplete }.count
         do {
             let plan = try LegacyTopologyPlanner.plan(topology(from: configuration))
-            return "Nur logische Vorschau: \(plan.usedInputs) Eingänge / \(plan.usedOutputs) Ausgänge" +
-                (unresolved == 0 ? "" : " (\(unresolved) unbekannt)") +
-                ". Noch keine 64-Kanal-Audiofreigabe."
+            return "Logical preview only: \(plan.usedInputs) inputs / \(plan.usedOutputs) outputs" +
+                (unresolved == 0 ? "" : " (\(unresolved) unknown)") +
+                ". 64-channel audio is not enabled."
         } catch {
-            return "Ungültige Kanalbelegung: \(error). Keine Hardwareänderung ausgeführt."
+            return "Invalid channel allocation: \(error). No hardware changes made."
         }
     }
 }
