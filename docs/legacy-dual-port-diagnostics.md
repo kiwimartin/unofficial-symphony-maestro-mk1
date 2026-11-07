@@ -35,7 +35,7 @@ The old `Tools/read-thunderbridge-health.swift` comment now states that limitati
 | 5–20 | Registers listed below, in order; bit i of bitmap validates register i |
 | 21–22 | Global interrupt callback count, low/high words (not a DMA error count) |
 | 23–24 | Port-1 audio wrap count while I/O ran, low/high words |
-| 25 | Reserved, zero |
+| 25 | Flags: bit 0 means counters unavailable (passive-only service); other bits zero |
 
 Register allowlist in `SymphonyPassiveDiagnostics.h`:
 

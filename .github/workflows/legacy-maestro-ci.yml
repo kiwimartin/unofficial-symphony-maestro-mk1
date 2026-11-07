@@ -31,6 +31,10 @@ jobs:
         run: bash Drivers/Thunderbolt/Scripts/test-audio-ring-copy.sh
       - name: Compile and link unsigned arm64 DriverKit executable (no profiles/install)
         run: bash Drivers/Thunderbolt/Scripts/build.sh --unsigned
+      - name: Passive-only driver source safety gates
+        run: bash Drivers/Thunderbolt/Scripts/test-passive-driver-source.sh
+      - name: Compile passive-only diagnostic driver (no AudioDriverKit or activation)
+        run: bash Drivers/Thunderbolt/Scripts/build-passive-diagnostics.sh
       - name: Compile passive legacy diagnostic CLI
         working-directory: Apps/Maestro
         run: swift build --product LegacyXLinkDiagnostics
@@ -61,6 +65,7 @@ jobs:
           cp Apps/Maestro/.build/release/HardwareTest build-preview/HardwareTest
           cp Apps/Maestro/.build/release/LegacyXLinkDiagnostics build-preview/
           cp Drivers/Thunderbolt/build/com.danielraffel.maestro.thunderbridge build-preview/ThunderBridge-unsigned
+          cp Drivers/Thunderbolt/build/passive/SymphonyPassiveDiagnostics-unsigned build-preview/
           cp docs/legacy-dual-port-diagnostics.md build-preview/
           git rev-parse HEAD > build-preview/SOURCE_COMMIT.txt
           sw_vers > build-preview/BUILD_ENVIRONMENT.txt
@@ -90,7 +95,7 @@ jobs:
           See docs/FORK_RELEASE_PROCESS.md and
               docs/legacy-first-release-readiness.md.
           EOF
-          (cd build-preview && shasum -a 256 MaestroApp HardwareTest LegacyXLinkDiagnostics ThunderBridge-unsigned SOURCE_COMMIT.txt BUILD_ENVIRONMENT.txt legacy-dual-port-diagnostics.md > SHA256SUMS.txt)
+          (cd build-preview && shasum -a 256 MaestroApp HardwareTest LegacyXLinkDiagnostics ThunderBridge-unsigned SymphonyPassiveDiagnostics-unsigned SOURCE_COMMIT.txt BUILD_ENVIRONMENT.txt legacy-dual-port-diagnostics.md > SHA256SUMS.txt)
       - name: Upload unsigned developer build (not an installer)
         uses: actions/upload-artifact@v4
         with:

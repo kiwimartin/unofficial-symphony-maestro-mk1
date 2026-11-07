@@ -45,7 +45,7 @@ struct LegacyControlWorkspaceView: View {
                         Text("Port \(port.port): Datenstatus \(port.dataState.rawValue), RX-Clock \(clockLabel(port.clockDetected)), Rate \(port.detectedSampleRate.map { "\($0) Hz" } ?? "unbekannt"), PLL-Lock unbekannt")
                             .font(.caption).textSelection(.enabled)
                     }
-                    if let snapshot = card.snapshot {
+                    if let snapshot = card.snapshot, snapshot.countersAvailable {
                         Text("IRQ gesamt: \(snapshot.irqCount) · Audio-Wraps Port 1: \(snapshot.port1WrapCount) · Port-2-Fehlerzähler unbekannt")
                             .font(.caption).foregroundStyle(.secondary)
                     }

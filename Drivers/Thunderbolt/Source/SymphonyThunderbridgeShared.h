@@ -131,7 +131,7 @@ typedef struct {
     uint32_t irqCountHi;
     uint32_t port1WrapCountLo;
     uint32_t port1WrapCountHi;
-    uint32_t reserved;
+    uint32_t reserved; // bit 0: counters unavailable (passive-only service); other bits zero
 } SymphonyDualPortDiagnosticsOutput; // 104 bytes, schema 1
 
 #pragma pack(pop)
