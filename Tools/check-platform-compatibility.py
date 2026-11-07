@@ -31,7 +31,9 @@ def source_errors(root, policy):
         if version(info['OSMinimumDriverKitVersion']) != version(policy['minimumDriverKit']):
             errors.append(f'{name}: DriverKit minimum differs from policy')
     installer = ET.parse(root / 'Installer/distribution.xml')
-    for floor in installer.findall('./allowed-os-versions/os-version'):
+    floors = installer.findall('./allowed-os-versions/os-version')
+    if len(floors) != 1: errors.append('installer must have one explicit OS minimum')
+    for floor in floors:
         if version(floor.attrib['min']) != version(policy['minimumMacOS']):
             errors.append('installer minimum differs from policy')
     package = (root / 'Apps/Maestro/Package.swift').read_text()
@@ -49,7 +51,7 @@ def inspect_macho(path):
     data = Path(path).read_bytes()
     if len(data) < 32: raise ValueError('truncated Mach-O header')
     header = struct.unpack_from('<8I', data)
-    if header[0] != 0xFEEDFACF or header[1] != 0x0100000C:
+    if header[0] != 0xFEEDFACF or header[1] != 0x0100000C or header[2] & 0xFFFFFF != 0:
         raise ValueError('expected thin arm64 Mach-O executable')
     commands, size = header[4:6]
     if size > len(data) - 32 or commands > size // 8: raise ValueError('truncated Mach-O commands')
@@ -106,6 +108,7 @@ def main():
     failures, records = binary_errors(args.binaries, policy); errors += failures
     if args.preview_bundle:
         errors += preview_errors(args.preview_bundle, policy)
+    preview_started = False
     if args.smoke_preview:
         if not args.preview_bundle or errors:
             errors.append('valid assembled preview required before smoke launch')
@@ -115,9 +118,10 @@ def main():
                                         text=True, capture_output=True, timeout=30)
                 if result.returncode or 'LEGACY_PREVIEW_SMOKE_OK' not in result.stdout:
                     errors.append(f'preview did not create a visible window (exit {result.returncode}): {result.stderr[-2000:]}')
+                else: preview_started = True
             except (OSError, subprocess.TimeoutExpired): errors.append('preview startup failed or exceeded 30 seconds')
     print(json.dumps({'policy': policy, 'hostMacOS': host, 'binaries': records,
-                      'previewWindowSmokeRequested': args.smoke_preview,
+                      'previewWindowSmokeRequested': args.smoke_preview, 'previewVisibleWindowStarted': preview_started,
                       'errors': errors, 'hardwareValidated': False}, indent=2))
     return 1 if errors else 0
 if __name__ == '__main__': sys.exit(main())

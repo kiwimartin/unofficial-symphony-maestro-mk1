@@ -176,14 +176,16 @@ jobs:
           (cd build-preview && shasum -a 256 * > ../legacy-checksums.txt)
           mv legacy-checksums.txt build-preview/SHA256SUMS.txt
       - name: Verify assembled preview and executable deployment minimums
+        shell: bash
         run: |
+          set -euo pipefail
           python3 Tools/check-platform-compatibility.py \
             --runner-label '${{ matrix.runner }}' \
             --smoke-preview --preview-bundle build/legacy-ci/LegacyMaestroPreview.app \
             --binaries Apps/Maestro/.build/release/MaestroApp \
               Apps/Maestro/.build/release/LegacyMaestroPreview \
               Drivers/Thunderbolt/build/com.danielraffel.maestro.thunderbridge \
-              Drivers/Thunderbolt/build/passive/SymphonyPassiveDiagnostics-unsigned
+              Drivers/Thunderbolt/build/passive/SymphonyPassiveDiagnostics-unsigned | tee legacy-platform-compatibility.json
       - name: Upload unsigned developer build (not an installer)
         uses: actions/upload-artifact@v4
         with:
@@ -200,6 +202,70 @@ jobs:
             legacy-build-environment.txt
             legacy-test-output.log
             legacy-release-tests.log
+            legacy-platform-compatibility.json
             legacy-test-results.xml
+          if-no-files-found: error
+          retention-days: 14
+
+  cross-os-preview-smoke:
+    name: ${{ matrix.label }}
+    needs: macos-swift
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            label: Tahoe-built preview on Sequoia 15
+            source_artifact_label: tahoe-26
+            report_label: tahoe-build-on-sequoia-15
+          - runner: macos-26
+            label: Sequoia-built preview on Tahoe 26
+            source_artifact_label: sequoia-15
+            report_label: sequoia-build-on-tahoe-26
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout platform checks
+        uses: actions/checkout@v4
+      - name: Record cross-OS test host
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            sw_vers
+            uname -m
+          } | tee cross-preview-environment.log
+      - name: Download the other OS's exact developer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: maestro-legacy-dev-binaries-${{ matrix.source_artifact_label }}-${{ github.run_number }}
+          path: downloaded
+      - name: Verify artifact checksums before extraction or execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd downloaded && shasum -a 256 -c SHA256SUMS.txt) 2>&1 | tee cross-preview-checksums.log
+      - name: Launch the other OS's isolated preview without driver access
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/cross-preview
+          ditto -x -k downloaded/LegacyMaestroPreview-app.zip build/cross-preview
+          python3 Tools/check-platform-compatibility.py \
+            --runner-label '${{ matrix.runner }}' \
+            --smoke-preview --preview-bundle build/cross-preview/LegacyMaestroPreview.app \
+            --binaries downloaded/MaestroApp downloaded/ThunderBridge-unsigned \
+              downloaded/SymphonyPassiveDiagnostics-unsigned \
+              build/cross-preview/LegacyMaestroPreview.app/Contents/MacOS/LegacyMaestroPreview \
+            2>&1 | tee cross-preview-smoke.log
+      - name: Retain cross-OS preview launch report even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-cross-preview-smoke-${{ matrix.report_label }}-${{ github.run_number }}
+          path: |
+            cross-preview-environment.log
+            cross-preview-checksums.log
+            cross-preview-smoke.log
           if-no-files-found: error
           retention-days: 14

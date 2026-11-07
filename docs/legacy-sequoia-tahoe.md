@@ -22,6 +22,12 @@ packaged driver records the actual selected SDK version separately.
 A missing Xcode 16.4 installation fails explicitly; CI never silently replaces
 that older-SDK check with a Tahoe SDK. Host OS and architecture are asserted, not
 inferred from a runner label. The two jobs do not cancel one another on failure.
+After both builds pass, two lightweight cross-OS jobs verify the downloaded
+artifact checksums, then launch the Tahoe-built preview on Sequoia and the
+Sequoia-built preview on Tahoe. Each launch checks the same visible-window marker
+and binary deployment floors; no driver is loaded. Reports are retained even
+on failure. Thus the preview binaries are exercised on both OSes, not only
+rebuilt separately.
 Artifact names include the OS, observed environment and source commit.
 
 The only explicit Tahoe-only SwiftUI call found in the audit is

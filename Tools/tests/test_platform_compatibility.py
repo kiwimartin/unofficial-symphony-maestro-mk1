@@ -24,8 +24,8 @@ class PlatformCompatibility(unittest.TestCase):
             installer = root / 'Installer/distribution.xml'
             installer.write_text(installer.read_text().replace('min="15.0"', 'min="26.0"'))
             self.assertIn('installer minimum differs from policy', compat.source_errors(root, POLICY))
-    def macho(self, target, floor, cpu=0x0100000C):
-        return struct.pack('<8I', 0xFEEDFACF, cpu, 0, 2, 1, 24, 0, 0) + struct.pack('<6I', 0x32, 24, target, floor << 16, 26 << 16, 0)
+    def macho(self, target, floor, cpu=0x0100000C, subtype=0):
+        return struct.pack('<8I', 0xFEEDFACF, cpu, subtype, 2, 1, 24, 0, 0) + struct.pack('<6I', 0x32, 24, target, floor << 16, 26 << 16, 0)
     def test_actual_binary_floor_and_architecture_must_match(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'binary'
@@ -34,6 +34,7 @@ class PlatformCompatibility(unittest.TestCase):
                 self.assertEqual(errors, []); self.assertEqual(records[0]['architecture'], 'arm64')
             path.write_bytes(self.macho(1, 26)); self.assertTrue(compat.binary_errors([path], POLICY)[0])
             path.write_bytes(self.macho(1, 15, cpu=0x01000007)); self.assertTrue(compat.binary_errors([path], POLICY)[0])
+            path.write_bytes(self.macho(10, 24, subtype=2)); self.assertTrue(compat.binary_errors([path], POLICY)[0])
     def test_truncated_or_malformed_macho_cannot_pass(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'binary'
