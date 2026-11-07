@@ -54,7 +54,7 @@ public struct LegacyRoutingInventory: Equatable, Sendable {
         // cannot silently reuse a previous slot map or routing preset.
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let ordered = configuration.assignments.sorted { $0.port == $1.port ? $0.position < $1.position : $0.port < $1.port }
-        self.signature = try encoder.encode(ordered).base64EncodedString()
+        self.signature = try encoder.encode(ordered).base64EncodedString() + "." + encoder.encode(endpoints).base64EncodedString()
     }
 }
 public struct LegacySlotEntry: Codable, Equatable, Sendable {
