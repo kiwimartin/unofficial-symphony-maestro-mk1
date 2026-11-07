@@ -4,27 +4,64 @@ import Testing
 
 @Suite("Legacy X-Symphony topology: logical model only")
 struct LegacySymphonyTopologyTests {
-    @Test func referenceSetupPlansTwoPorts() throws {
-        let plan = try LegacyTopologyPlanner.plan(.referenceStudio())
-        #expect(plan.ports.count == 2)
-        #expect(plan.usedInputs == 32)     // 16 AD analog + 16 DA Advanced digital
-        #expect(plan.usedOutputs == 64)    // 4 x 16 DA analog
-        #expect(plan.ports[0].usedInputs == 16)
-        #expect(plan.ports[0].usedOutputs == 32)
-        #expect(plan.ports[1].usedInputs == 16)
-        #expect(plan.ports[1].usedOutputs == 32)
-        #expect(plan.ports[0].devices[0].inputs == LegacyChannelRange(first: 1, count: 16))
-        #expect(plan.ports[0].devices[1].outputs == LegacyChannelRange(first: 1, count: 16))
-        #expect(plan.ports[0].devices[2].outputs == LegacyChannelRange(first: 17, count: 16))
-        #expect(plan.ports[1].devices[0].outputs == LegacyChannelRange(first: 33, count: 16))
-        #expect(plan.ports[1].devices[1].inputs == LegacyChannelRange(first: 33, count: 16))
-        #expect(plan.ports[1].devices[1].outputs == LegacyChannelRange(first: 49, count: 16))
+    @Test func arbitraryMixedProfilesAcrossPorts() throws {
+        // The input inventory comes from the caller, not the production code.
+        let custom = LegacyConverterProfile(
+            id: "custom.4x4", name: "Configurable 4-in / 4-out",
+            standard: .init(analogInputs: 4, analogOutputs: 4))
+        let setup = LegacyTopology(ports: [
+            LegacyPort(number: 1, chain: [
+                .init(id: "p1-a", profile: .rosetta800, identification: .detected),
+                .init(id: "p1-b", profile: .da16x, mode: .advanced, identification: .manual)
+            ]),
+            LegacyPort(number: 2, chain: [
+                .init(id: "p2-a", profile: .ad16x, identification: .detected),
+                .init(id: "p2-b", profile: custom, identification: .manual)
+            ])
+        ])
+        let plan = try LegacyTopologyPlanner.plan(setup)
+        #expect(plan.ports.map(\.port) == [1, 2])
+        #expect(plan.usedInputs == 44)
+        #expect(plan.usedOutputs == 28)
+        #expect(plan.ports[0].usedInputs == 24)
+        #expect(plan.ports[0].usedOutputs == 24)
+        #expect(plan.ports[1].usedInputs == 20)
+        #expect(plan.ports[1].usedOutputs == 4)
+        #expect(plan.ports[0].devices[0].inputs == LegacyChannelRange(first: 1, count: 8))
+        #expect(plan.ports[0].devices[0].outputs == LegacyChannelRange(first: 1, count: 8))
+        #expect(plan.ports[0].devices[1].inputs == LegacyChannelRange(first: 9, count: 16))
+        #expect(plan.ports[0].devices[1].outputs == LegacyChannelRange(first: 9, count: 16))
+        #expect(plan.ports[1].devices[0].inputs == LegacyChannelRange(first: 33, count: 16))
+        #expect(plan.ports[1].devices[1].inputs == LegacyChannelRange(first: 49, count: 4))
+        #expect(plan.ports[1].devices[1].outputs == LegacyChannelRange(first: 33, count: 4))
+        #expect(plan.ports[0].devices[1].identification == .manual)
+        #expect(plan.ports[1].devices[0].identification == .detected)
+        #expect(plan.warnings.isEmpty)
         #expect(plan.requiresHardwareValidation)
-        #expect(plan.warnings.count >= 2)
+    }
+
+    @Test func portsAreOrderedByNumberNotInputOrder() throws {
+        let setup = LegacyTopology(ports: [
+            LegacyPort(number: 2, chain: [
+                .init(id: "p2", profile: .rosetta200, identification: .detected)
+            ]),
+            LegacyPort(number: 1, chain: [
+                .init(id: "p1", profile: .da16x, identification: .detected)
+            ])
+        ])
+        let plan = try LegacyTopologyPlanner.plan(setup)
+        #expect(plan.ports.map(\.port) == [1, 2])
+        #expect(plan.ports[0].devices[0].outputs == LegacyChannelRange(first: 1, count: 16))
+        #expect(plan.ports[1].devices[0].inputs == LegacyChannelRange(first: 33, count: 2))
+        #expect(plan.ports[1].devices[0].outputs == LegacyChannelRange(first: 33, count: 2))
     }
 
     @Test func clockIsOptionalAndRoundTrips() throws {
-        var setup = LegacyTopology.referenceStudio()
+        var setup = LegacyTopology(ports: [
+            LegacyPort(number: 2, chain: [
+                .init(id: "clock-example", profile: .rosetta200, identification: .manual)
+            ])
+        ])
         #expect(setup.clockPreference == .internalClock)
         setup.clockPreference = .externalWordClock
         let data = try JSONEncoder().encode(setup)
@@ -100,7 +137,7 @@ struct LegacySymphonyTopologyTests {
 
     @Test func extensibleCustomProfile() throws {
         let profile = LegacyConverterProfile(
-            id: "studio.test", name: "Custom 4-in 8-out",
+            id: "custom.test", name: "Custom 4-in 8-out",
             standard: .init(analogInputs: 4, analogOutputs: 8))
         let setup = LegacyTopology(ports: [
             LegacyPort(number: 2, chain: [
