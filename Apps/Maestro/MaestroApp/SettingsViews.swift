@@ -970,8 +970,7 @@ struct SystemSetupView: View {
             if appState.transportType == .thunderbolt ||
                appState.softwareInfoReport.thunderBridgePresent {
                 Section("Legacy X-Symphony – Wandlerzuordnung") {
-                    LegacyConverterConfigurationView(
-                        observations: appState.legacyConverterObservations)
+                    LegacyControlWorkspaceView(observations: appState.legacyConverterObservations)
                 }
             }
 

@@ -54,7 +54,7 @@ public struct LegacyRoutingInventory: Equatable, Sendable {
         // cannot silently reuse a previous slot map or routing preset.
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let ordered = configuration.assignments.sorted { $0.port == $1.port ? $0.position < $1.position : $0.port < $1.port }
-        self.signature = try encoder.encode(ordered).base64EncodedString()
+        self.signature = try encoder.encode(ordered).base64EncodedString() + "." + encoder.encode(endpoints).base64EncodedString()
     }
 }
 public struct LegacySlotEntry: Codable, Equatable, Sendable {
@@ -107,10 +107,12 @@ public struct LegacyRoutingPreset: Codable, Equatable, Sendable {
     public let inventorySignature: String
     public let mapSignature: String
     public let sampleRate: UInt32
+    public let slotEntries: [LegacySlotEntry]
     public var routes: [LegacyRoute]
     public init(name: String, inventory: LegacyRoutingInventory, map: LegacySlotMap, routes: [LegacyRoute]) {
         self.name = name; self.inventorySignature = inventory.signature
-        self.mapSignature = map.signature; self.sampleRate = map.sampleRate; self.routes = routes
+        self.mapSignature = map.signature; self.sampleRate = map.sampleRate
+        self.slotEntries = map.entries; self.routes = routes
     }
     /// Returns local intended routes only. No hardware executor exists until the
     /// legacy routing protocol is verified. Saved data never grants write access.
