@@ -36,6 +36,7 @@
 #include "Sym64Registers.h"
 #include "SymphonyTimingProfile.h"
 #include "SymphonyPassiveDiagnostics.h"
+#include "SymphonyAudioRingCopy.h"
 #include "SymphonyMixerPan.h"
 #include "SymphonyCardMixerRouting.h"
 
@@ -3862,45 +3863,22 @@ kern_return_t IMPL(SymphonyThunderbridge, Start)
                                uint64_t in_sample_time,
                                uint64_t in_host_time) {
 
-                    uint32_t frameOffset = (uint32_t)(in_sample_time % kNumSampleFrames);
-                    uint32_t byteOffset  = frameOffset * kBytesPerFrame;
-                    uint32_t byteCount   = in_io_buffer_frame_size * kBytesPerFrame;
-
-                    // Safety clamp: prevent overrun if host passes unexpected frame count
-                    if (byteCount > kRingBytes) byteCount = kRingBytes;
-
+                    const SymphonyAudio::Buffer playback[] = {{h2aDMABase, kDMABufferSize}};
+                    const SymphonyAudio::Buffer capture[] = {{a2hDMABase, kDMABufferSize}};
+                    bool copied = true;
                     if (in_io_operation == IOUserAudioIOOperationWriteEnd) {
-                        // Playback: CoreAudio wrote to stream buffer → copy to DMA buffer
-                        // Handle ring buffer wrap-around
-                        if (byteOffset + byteCount <= kRingBytes) {
-                            memcpy(h2aDMABase + byteOffset,
-                                   h2aStreamBase + byteOffset,
-                                   byteCount);
-                        } else {
-                            uint32_t firstPart = kRingBytes - byteOffset;
-                            memcpy(h2aDMABase + byteOffset,
-                                   h2aStreamBase + byteOffset,
-                                   firstPart);
-                            memcpy(h2aDMABase,
-                                   h2aStreamBase,
-                                   byteCount - firstPart);
-                        }
+                        copied = SymphonyAudio::Copy(SymphonyAudio::Direction::playback,
+                            {h2aStreamBase, kRingBytes}, playback, 1, kNumSampleFrames,
+                            in_sample_time, in_io_buffer_frame_size);
                     } else if (in_io_operation == IOUserAudioIOOperationBeginRead) {
-                        // Capture: copy DMA buffer → stream buffer before CoreAudio reads
-                        if (byteOffset + byteCount <= kRingBytes) {
-                            memcpy(a2hStreamBase + byteOffset,
-                                   a2hDMABase + byteOffset,
-                                   byteCount);
-                        } else {
-                            uint32_t firstPart = kRingBytes - byteOffset;
-                            memcpy(a2hStreamBase + byteOffset,
-                                   a2hDMABase + byteOffset,
-                                   firstPart);
-                            memcpy(a2hStreamBase,
-                                   a2hDMABase,
-                                   byteCount - firstPart);
-                        }
+                        copied = SymphonyAudio::Copy(SymphonyAudio::Direction::capture,
+                            {a2hStreamBase, kRingBytes}, capture, 1, kNumSampleFrames,
+                            in_sample_time, in_io_buffer_frame_size);
                     }
+                    if (!copied) return kIOReturnBadArgument;
+#if SYMPHONY_RT_DEBUG
+                    const uint32_t byteOffset = uint32_t(in_sample_time % kNumSampleFrames) * kBytesPerFrame;
+#endif
 
                     // Diagnostic logging — first calls + periodic (STLOG is RT-unsafe).
                     // M4: gated behind SYMPHONY_RT_DEBUG (default OFF). When off, the

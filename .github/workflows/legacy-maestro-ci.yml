@@ -27,6 +27,8 @@ jobs:
         run: bash Drivers/Thunderbolt/Scripts/test-passive-diagnostics.sh
       - name: Dual-port DMA policy and bounds (sanitizers)
         run: bash Drivers/Thunderbolt/Scripts/test-dual-port-dma.sh
+      - name: Audio ring copy and channel isolation (sanitizers)
+        run: bash Drivers/Thunderbolt/Scripts/test-audio-ring-copy.sh
       - name: Compile and link unsigned arm64 DriverKit executable (no profiles/install)
         run: bash Drivers/Thunderbolt/Scripts/build.sh --unsigned
       - name: Compile passive legacy diagnostic CLI
