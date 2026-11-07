@@ -964,6 +964,17 @@ struct SystemSetupView: View {
                 .disabled(isLoading)
             }
 
+            // Legacy 16X hardware is distinct from Symphony I/O MK I option
+            // boards. This section stores operator-supplied per-converter labels;
+            // it does not attempt to control unsupported legacy vendor commands.
+            if appState.transportType == .thunderbolt ||
+               appState.softwareInfoReport.thunderBridgePresent {
+                Section("Legacy X-Symphony – Wandlerzuordnung") {
+                    LegacyConverterConfigurationView(
+                        observations: appState.legacyConverterObservations)
+                }
+            }
+
             // Meters — Peak Hold and Over Hold (matching original Maestro 2 System Setup)
             Section("Meters") {
                 Picker("Peak Hold", selection: $peakHoldMode) {
