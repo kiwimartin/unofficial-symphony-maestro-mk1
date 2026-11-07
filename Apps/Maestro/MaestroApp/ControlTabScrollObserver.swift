@@ -105,10 +105,14 @@ struct ControlTabScrollObserver: NSViewRepresentable {
                 object: clipView,
                 queue: .main
             ) { [weak self, weak clipView] _ in
-                guard let self, let clipView else { return }
-                let offset = clipView.bounds.origin.x
-                ScrollPerformanceInstrumentation.record(tab: self.tab, offset: offset)
-                self.scheduleOffsetWrite(offset)
+                // NotificationCenter does not express its .main delivery queue
+                // in the Sendable callback's actor isolation.
+                MainActor.assumeIsolated {
+                    guard let self, let clipView else { return }
+                    let offset = clipView.bounds.origin.x
+                    ScrollPerformanceInstrumentation.record(tab: self.tab, offset: offset)
+                    self.scheduleOffsetWrite(offset)
+                }
             }
             // Apply the saved offset the moment the document gets its width —
             // synchronously, inside the layout pass that sizes it — so the first
@@ -125,8 +129,12 @@ struct ControlTabScrollObserver: NSViewRepresentable {
                     object: documentView,
                     queue: nil   // deliver synchronously on the posting (main) thread
                 ) { [weak self, weak scrollView] _ in
-                    guard let self, let scrollView else { return }
-                    self.applyRestorationNow(on: scrollView)
+                    // AppKit posts document sizing changes on the main thread.
+                    // Keep restoration synchronous, before the layout is painted.
+                    MainActor.assumeIsolated {
+                        guard let self, let scrollView else { return }
+                        self.applyRestorationNow(on: scrollView)
+                    }
                 }
             }
             applyRestorationNow(on: scrollView)

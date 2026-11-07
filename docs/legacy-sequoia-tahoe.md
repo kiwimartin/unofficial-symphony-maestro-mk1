@@ -34,7 +34,12 @@ The only explicit Tahoe-only SwiftUI call found in the audit is
 `scrollEdgeEffectHidden`. It retains its macOS 26 runtime availability gate and
 now also has a compiler gate for the Xcode 16 toolchain, whose SDK does not even
 declare it. Sequoia keeps the existing scroll-bounce fallback; Tahoe keeps the
-same styling. No audio timing/register/lifecycle logic changes for compatibility.
+same styling. The older compiler also exposed existing main-actor violations
+in scroll notifications and monitor undo callbacks. Notifications now assert
+their documented main-thread delivery synchronously; undo updates UI state on
+the main actor and sends only the Sendable device connection into async writes.
+Scroll debounce/restoration and monitor values remain the same. No audio
+timing/register/lifecycle logic changes for compatibility.
 
 The audited AudioDriverKit construction, latency/safety-offset, configuration-
 change and IO-operation-handler methods predate DriverKit 24; their public Apple

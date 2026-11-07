@@ -257,11 +257,16 @@ struct MonitorToolbarView: View {
                     appState.speakerMuted.toggle()
                     let muted = appState.speakerMuted
                     let prev = !muted
+                    // UI UndoManager callbacks execute on the main thread.
+                    // Keep state access there; only the Sendable device enters the async write.
                     um?.registerUndo(withTarget: appState) { s in
-                        Task { @MainActor in
+                        MainActor.assumeIsolated {
                             s.speakerMuted = prev
-                            try? await s.device?.setProperty(
-                                PropertyAddress(selector: .outputMute), value: .bool(prev))
+                            let device = s.device
+                            Task { @MainActor in
+                                try? await device?.setProperty(
+                                    PropertyAddress(selector: .outputMute), value: .bool(prev))
+                            }
                         }
                     }
                     um?.setActionName("Speaker Mute")
@@ -285,11 +290,14 @@ struct MonitorToolbarView: View {
                     onUserChange: { level in
                         guard !isLoading else { return }
                         um?.registerUndo(withTarget: appState) { s in
-                            Task { @MainActor in
+                            MainActor.assumeIsolated {
                                 s.speakerLevel = prevSpeakerLevel
-                                try? await s.device?.setProperty(
-                                    PropertyAddress(selector: .outputLevel),
-                                    value: .uint32(UInt32(max(0, -prevSpeakerLevel))))
+                                let device = s.device
+                                Task { @MainActor in
+                                    try? await device?.setProperty(
+                                        PropertyAddress(selector: .outputLevel),
+                                        value: .uint32(UInt32(max(0, -prevSpeakerLevel))))
+                                }
                             }
                         }
                         um?.setActionName("Speaker Level")
@@ -315,10 +323,13 @@ struct MonitorToolbarView: View {
                     let muted = appState.hp1Muted
                     let prev = !muted
                     um?.registerUndo(withTarget: appState) { s in
-                        Task { @MainActor in
+                        MainActor.assumeIsolated {
                             s.hp1Muted = prev
-                            try? await s.device?.setProperty(
-                                PropertyAddress(selector: .headphone1Mute), value: .bool(prev))
+                            let device = s.device
+                            Task { @MainActor in
+                                try? await device?.setProperty(
+                                    PropertyAddress(selector: .headphone1Mute), value: .bool(prev))
+                            }
                         }
                     }
                     um?.setActionName("Headphone 1 Mute")
@@ -339,11 +350,14 @@ struct MonitorToolbarView: View {
                     onUserChange: { level in
                         guard !isLoading else { return }
                         um?.registerUndo(withTarget: appState) { s in
-                            Task { @MainActor in
+                            MainActor.assumeIsolated {
                                 s.hp1Level = prevHP1Level
-                                try? await s.device?.setProperty(
-                                    PropertyAddress(selector: .headphone1Level),
-                                    value: .uint32(UInt32(max(0, -prevHP1Level))))
+                                let device = s.device
+                                Task { @MainActor in
+                                    try? await device?.setProperty(
+                                        PropertyAddress(selector: .headphone1Level),
+                                        value: .uint32(UInt32(max(0, -prevHP1Level))))
+                                }
                             }
                         }
                         um?.setActionName("Headphone 1 Level")
@@ -366,10 +380,13 @@ struct MonitorToolbarView: View {
                     let muted = appState.hp2Muted
                     let prev = !muted
                     um?.registerUndo(withTarget: appState) { s in
-                        Task { @MainActor in
+                        MainActor.assumeIsolated {
                             s.hp2Muted = prev
-                            try? await s.device?.setProperty(
-                                PropertyAddress(selector: .headphone2Mute), value: .bool(prev))
+                            let device = s.device
+                            Task { @MainActor in
+                                try? await device?.setProperty(
+                                    PropertyAddress(selector: .headphone2Mute), value: .bool(prev))
+                            }
                         }
                     }
                     um?.setActionName("Headphone 2 Mute")
@@ -390,11 +407,14 @@ struct MonitorToolbarView: View {
                     onUserChange: { level in
                         guard !isLoading else { return }
                         um?.registerUndo(withTarget: appState) { s in
-                            Task { @MainActor in
+                            MainActor.assumeIsolated {
                                 s.hp2Level = prevHP2Level
-                                try? await s.device?.setProperty(
-                                    PropertyAddress(selector: .headphone2Level),
-                                    value: .uint32(UInt32(max(0, -prevHP2Level))))
+                                let device = s.device
+                                Task { @MainActor in
+                                    try? await device?.setProperty(
+                                        PropertyAddress(selector: .headphone2Level),
+                                        value: .uint32(UInt32(max(0, -prevHP2Level))))
+                                }
                             }
                         }
                         um?.setActionName("Headphone 2 Level")
