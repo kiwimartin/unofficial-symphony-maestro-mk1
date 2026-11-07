@@ -13,6 +13,18 @@ checksums, phase status documents and developer-only preflight output; separate
 artifacts retain full test logs. These are NOT installable audio driver bundles,
 an installer, a signed app or evidence of 64-channel hardware operation.
 
+The standalone `LegacyMaestroPreview` executable also assembles into an unsigned
+.app ZIP with a separate preview identifier. It shares the legacy workspace with
+the shipping app but never instantiates shipping AppState, Sparkle, automatic
+driver activation, vendor writes or audio startup. This makes local configuration
+and passive diagnostics accessible without an existing Core Audio device. It
+contains no system extension or update feed, requires no original credentials,
+and is not signed/notarized or claimed to launch under every Gatekeeper policy.
+The original application's identifiers, updater and activation behavior stay unchanged.
+Run `swift run --package-path Apps/Maestro LegacyMaestroPreview` on a development
+Mac, or obtain the developer .app ZIP from the CI artifact. Hardware access still
+requires the own approved client/driver signing described below.
+
 `Tools/legacy-release-check.py` is a read-only validator with four build classes:
 
 - Developer: no signing/profile inputs required; never establishes hardware acceptance.

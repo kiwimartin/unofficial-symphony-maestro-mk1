@@ -5,6 +5,7 @@ import CoreAudio
 import CoreGraphics
 import MaestroCore
 import MaestroDevice
+import LegacyMaestroUI
 
 /// Device Settings view — optical format, S/PDIF config, meter display, front panel.
 ///

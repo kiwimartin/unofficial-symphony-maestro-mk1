@@ -4,7 +4,7 @@ import MaestroCore
 import LegacyDiagnosticTransport
 
 /// Legacy-only workspace. All edits are local; hardware controls remain closed.
-struct LegacyControlWorkspaceView: View {
+public struct LegacyControlWorkspaceView: View {
     let observations: [LegacyConverterObservation]
     private let profiles: [LegacyConverterProfile] = [.ad16x, .da16x, .rosetta200, .rosetta800]
     @State private var configuration = LegacyManualConfiguration()
@@ -26,7 +26,8 @@ struct LegacyControlWorkspaceView: View {
     private var inventory: LegacyRoutingInventory? {
         try? LegacyRoutingInventory(configuration: configuration, profiles: profiles)
     }
-    var body: some View {
+    public init(observations: [LegacyConverterObservation] = []) { self.observations = observations }
+    public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Legacy-Konfiguration · Hardware-Unterstützung noch nicht freigegeben")
                 .font(.headline)

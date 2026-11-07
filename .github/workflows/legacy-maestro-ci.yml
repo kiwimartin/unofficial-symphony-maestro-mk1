@@ -57,6 +57,9 @@ jobs:
       - name: Compile passive legacy diagnostic CLI
         working-directory: Apps/Maestro
         run: swift build --product LegacyXLinkDiagnostics
+      - name: Compile standalone passive developer GUI
+        working-directory: Apps/Maestro
+        run: swift build --product LegacyMaestroPreview
       - name: Compile Maestro SwiftUI executable
         working-directory: Apps/Maestro
         run: swift build --product MaestroApp
@@ -72,6 +75,7 @@ jobs:
       - name: Compile release-optimized developer binaries (unsigned)
         working-directory: Apps/Maestro
         run: |
+          swift build -c release --product LegacyMaestroPreview
           swift build -c release --product MaestroApp
           swift build -c release --product HardwareTest
           swift build -c release --product LegacyXLinkDiagnostics
@@ -80,6 +84,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build-preview
+          python3 Tools/assemble-legacy-preview.py Apps/Maestro/.build/release/LegacyMaestroPreview build/legacy-ci/LegacyMaestroPreview.app
+          ditto -c -k --keepParent build/legacy-ci/LegacyMaestroPreview.app build-preview/LegacyMaestroPreview-app.zip
           cp Apps/Maestro/.build/release/MaestroApp build-preview/MaestroApp
           cp Apps/Maestro/.build/release/HardwareTest build-preview/HardwareTest
           cp Apps/Maestro/.build/release/LegacyXLinkDiagnostics build-preview/
@@ -96,11 +102,13 @@ jobs:
           cat > build-preview/README.txt <<'EOF'
           MAESTRO LEGACY X-SYMPHONY — UNSIGNED DEVELOPMENT BINARIES
 
-          This is NOT a macOS .app, NOT an installer, and NOT a production
+          This archive includes an isolated unsigned developer .app ZIP. It is
+          NOT an installer and NOT a production
           release. These command-line binaries are supplied solely for build
           diagnostics and developer analysis.
 
-          Includes: unsigned USB plugin/proxy compile products (not installed),
+          Includes: LegacyMaestroPreview-app.zip (no Sparkle or driver activation),
+          unsigned USB plugin/proxy compile products (not installed),
           phase status documents, explicit developer-only preflight report,
           passive LegacyXLinkDiagnostics CLI and unsigned DriverKit
           executable (compile/link evidence only; no installable dext bundle).
@@ -108,7 +116,7 @@ jobs:
           LegacyXLinkDiagnostics uses only passive selector 6; it requires a
           suitably signed diagnostic client and driver for actual hardware access.
 
-          Not included: app bundle, Sparkle framework, installable DriverKit extension,
+          Not included: signed shipping app, Sparkle framework, installable DriverKit extension,
           installable AudioServerPlugin bundle, provisioning profiles, code signatures, PKG,
           notarization, or evidence of functioning legacy 64-channel audio.
           Do NOT install this archive over an existing Maestro application.
